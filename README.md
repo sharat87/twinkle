@@ -2,13 +2,14 @@
 
 A small, fast web browser for macOS, built on the system's WebKit.
 
-- **Tabs down the left**, one address field, the page. No start page, no accounts.
+- **Tabs down the right**, one address field, the page. No start page, no accounts.
 - **Containers**, like Firefox's Multi-Account Containers: tabs in one window, each container with its own cookies, storage and cache. Sites can be assigned to a container so they always open there.
 - **Temporary containers**: a throwaway cookie jar, kept only in memory and gone when its last tab closes.
 - **Idle tabs unload** after 30 minutes in the background, freeing their memory, and come back with their history when clicked. Tabs playing sound or holding a half-filled form are left alone.
 - **The page's host in the window title** (`Title - example.com`), so KeePassXC auto-type matches sites without a browser extension.
 - **Ad and tracker blocking** with EasyList and EasyPrivacy (or any EasyList/uBlock-syntax list, or hosts file), compiled into WebKit content blockers that run before requests are made.
 - **No permission prompts.** Camera, microphone and screen capture are always denied. Location and web notifications don't exist here.
+- **JSON responses pretty-printed** and highlighted, with exact numbers and key order (Raw shows the original).
 - **Settings in plain files**, re-read whenever the app comes to the front.
 
 ## Build and run
@@ -75,9 +76,9 @@ A site covers its subdomains, and the most specific entry wins: here `mail.examp
 |---|---|
 | `⌘T` new tab (same container) · `⌃⌘0` new tab, no container · `⌃⌘1`–`9` new tab in container · `⌥⌘T` new temporary container | `⌘W` close · `⇧⌘T` reopen closed tab |
 | `⌘L` address · `⌘F` find · `⌘G` / `⇧⌘G` next / previous | `⌘[` / `⌘]` back / forward · `⌘R` reload · `⌥⌘R` reload from origin |
-| `⌃Tab` / `⌃⇧Tab`, `⇧⌘]` / `⇧⌘[` next / previous tab · `⌘1`–`⌘9` jump | `⌘+` / `⌘-` / `⌘0` zoom · `⌃⌘S` sidebar · `⇧⌘N` new container |
+| `⌃Tab` / `⌃⇧Tab`, `⇧⌘]` / `⇧⌘[` next / previous tab · `⌘1`–`⌘9` jump | `⌘+` / `⌘-` / `⌘0` zoom · `⌃⌘S` tab list · `⇧⌘N` new container |
 
-⌘-click or middle-click a link to open it in a background tab in the same container; add ⇧ to switch to it. Right-click a tab to reopen it in another container (or a new temporary one), or to unload it now. Right-click a page › Inspect Element opens Safari's Web Inspector.
+⌘-click or middle-click a link to open it in a background tab in the same container; add ⇧ to switch to it. Middle-click a tab to close it. Right-click a tab to reopen it in another container (or a new temporary one), or to unload it now. Right-click a page › Inspect Element opens Safari's Web Inspector.
 
 ## Code
 
@@ -93,6 +94,8 @@ Sources/Twinkle/       The macOS app (AppKit + WKWebView).
   AppState                 settings/containers files, one data store per container
   Downloads                WKDownload to the downloads folder
   Favicons                 site icons, fetched without cookies
+  JSONViewer               pretty-prints JSON responses
+scripts/make-icon.swift    draws the app icon (build.sh runs it)
   Debug                    inspection hook used by debug.sh
 ```
 

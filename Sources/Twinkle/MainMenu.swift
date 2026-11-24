@@ -66,7 +66,7 @@ enum MainMenu {
             item("Zoom Out", #selector(BrowserWindowController.zoomOut(_:)), "-"),
             item("Actual Size", #selector(BrowserWindowController.actualSize(_:)), "0"),
             .separator(),
-            item("Toggle Sidebar", #selector(NSSplitViewController.toggleSidebar(_:)), "s", [.command, .control]),
+            item("Show/Hide Tab List", #selector(BrowserWindowController.toggleTabList(_:)), "s", [.command, .control]),
             item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]),
         ]))
 

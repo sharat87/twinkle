@@ -18,6 +18,10 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/Twinkle"
 cp Resources/Info.plist "$app/Contents/Info.plist"
+# The icon is drawn by a script; redrawn only when the script changes.
+icon=.build/AppIcon.icns
+[[ -f "$icon" && "$icon" -nt scripts/make-icon.swift ]] || swift scripts/make-icon.swift "$icon"
+cp "$icon" "$app/Contents/Resources/AppIcon.icns"
 # Ad-hoc signature: enough to run locally.
 codesign --force --sign - "$app" >/dev/null
 echo "Built $app"

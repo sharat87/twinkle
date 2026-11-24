@@ -221,6 +221,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
             config.preferences.javaScriptCanOpenWindowsAutomatically = false
         }
         Blocker.shared.register(config.userContentController)
+        JSONViewer.install(config.userContentController)
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self

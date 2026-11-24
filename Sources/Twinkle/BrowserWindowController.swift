@@ -22,12 +22,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     private var unloadTimer: Timer?
 
     private let split = NSSplitViewController()
-    private let table = NSTableView()
+    private var tabListItem: NSSplitViewItem!
+    private let table = TabTableView()
     private let statusButton = NSButton(title: "", target: nil, action: nil)
     private let addressField = NSTextField()
     private let badge = NSTextField(labelWithString: "")
     private let badgeBox = NSView()
-    private let addressBox = NSStackView()
+    private let addressBox = NSBox()
     private let progressBar = NSView()
     private var progressWidth: NSLayoutConstraint!
     private var findBarHeight: NSLayoutConstraint!
@@ -51,22 +52,27 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             backing: .buffered, defer: false)
         window.titleVisibility = .hidden
         window.toolbarStyle = .unifiedCompact
+        window.titlebarSeparatorStyle = .none
         window.minSize = NSSize(width: 520, height: 320)
         window.tabbingMode = .disallowed
         super.init(window: window)
         window.delegate = self
 
-        let sidebar = NSViewController()
-        sidebar.view = makeSidebar()
+        // The page on the left, the tab list on the right.
         let content = NSViewController()
         content.view = makeContent()
-        let sideItem = NSSplitViewItem(sidebarWithViewController: sidebar)
-        sideItem.minimumThickness = 150
-        sideItem.maximumThickness = 420
-        sideItem.canCollapse = true
-        split.addSplitViewItem(sideItem)
+        let tabList = NSViewController()
+        tabList.view = makeSidebar()
+        tabListItem = NSSplitViewItem(viewController: tabList)
+        tabListItem.minimumThickness = 170
+        tabListItem.maximumThickness = 420
+        tabListItem.canCollapse = true
+        // Resizing the window resizes the page, not the tab list.
+        tabListItem.holdingPriority = NSLayoutConstraint.Priority(260)
         split.addSplitViewItem(NSSplitViewItem(viewController: content))
-        split.splitView.autosaveName = "TwinkleSidebar"
+        split.addSplitViewItem(tabListItem)
+        split.splitView.dividerStyle = .thin
+        split.splitView.autosaveName = "TwinkleTabList"
         window.contentViewController = split
 
         let toolbar = NSToolbar(identifier: "TwinkleToolbar")
@@ -105,19 +111,24 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     // MARK: Building the window
 
     private func makeSidebar() -> NSView {
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 230, height: 800))
+        let root = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 240, height: 800))
+        root.material = .sidebar
+        root.blendingMode = .behindWindow
+        root.state = .followsWindowActiveState
 
         let column = NSTableColumn(identifier: .init("tab"))
         column.resizingMask = .autoresizingMask
         table.addTableColumn(column)
         table.headerView = nil
         table.style = .sourceList
-        table.rowHeight = 30
+        table.backgroundColor = .clear
+        table.rowHeight = 34
         table.intercellSpacing = NSSize(width: 0, height: 2)
         table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         table.dataSource = self
         table.delegate = self
         table.registerForDraggedTypes([.twinkleTab])
+        table.onMiddleClick = { [weak self] row in self?.closeTab(at: row) }
         table.draggingDestinationFeedbackStyle = .gap
         let menu = NSMenu()
         menu.delegate = self
@@ -132,12 +143,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         let plus = NSButton(image: NSImage(systemSymbolName: "plus", accessibilityDescription: "New Tab")!,
                             target: self, action: #selector(newTab(_:)))
         plus.isBordered = false
+        plus.contentTintColor = .secondaryLabelColor
         plus.toolTip = "New Tab (⌘T)"
 
         statusButton.isBordered = false
         statusButton.alignment = .left
         statusButton.lineBreakMode = .byTruncatingMiddle
-        statusButton.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        statusButton.font = .systemFont(ofSize: 12)
         statusButton.contentTintColor = .secondaryLabelColor
         statusButton.target = self
         statusButton.action = #selector(revealStatusFile(_:))
@@ -167,8 +179,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
         // The address field lives in the toolbar (see toolbar(_:itemForItemIdentifier:)).
         addressField.placeholderString = "Search or enter address"
-        addressField.bezelStyle = .roundedBezel
-        addressField.font = .systemFont(ofSize: 13)
+        // No bezel or focus ring: the rounded box around it is the field.
+        addressField.isBordered = false
+        addressField.drawsBackground = false
+        addressField.focusRingType = .none
+        addressField.font = .systemFont(ofSize: 14)
         addressField.lineBreakMode = .byTruncatingTail
         addressField.usesSingleLineMode = true
         addressField.cell?.isScrollable = true
@@ -176,7 +191,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         addressField.action = #selector(addressEntered(_:))
         addressField.delegate = self
 
-        badge.font = .systemFont(ofSize: 11, weight: .semibold)
+        badge.font = .systemFont(ofSize: 12, weight: .medium)
         badge.textColor = .white
         badge.translatesAutoresizingMaskIntoConstraints = false
         badgeBox.wantsLayer = true
@@ -187,16 +202,30 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             badge.trailingAnchor.constraint(equalTo: badgeBox.trailingAnchor, constant: -7),
             badge.centerYAnchor.constraint(equalTo: badgeBox.centerYAnchor),
             badgeBox.heightAnchor.constraint(equalToConstant: 20),
+            badgeBox.widthAnchor.constraint(greaterThanOrEqualToConstant: 4),
         ])
         badgeBox.isHidden = true
 
-        addressBox.orientation = .horizontal
-        addressBox.spacing = 6
-        addressBox.addArrangedSubview(badgeBox)
-        addressBox.addArrangedSubview(addressField)
+        let row = NSStackView(views: [badgeBox, addressField])
+        row.orientation = .horizontal
+        row.spacing = 6
+        row.alignment = .centerY
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addressBox.boxType = .custom
+        addressBox.borderWidth = 0
+        addressBox.cornerRadius = 8
+        addressBox.fillColor = .quaternarySystemFill
+        addressBox.contentViewMargins = .zero
+        addressBox.titlePosition = .noTitle
+        addressBox.contentView?.addSubview(row)
+        let inner = addressBox.contentView!
         // A range, not a size: the toolbar gives the item whatever room is
         // left. A large preferred width makes it overflow into the » menu.
         NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: inner.leadingAnchor, constant: 8),
+            row.trailingAnchor.constraint(equalTo: inner.trailingAnchor, constant: -10),
+            row.centerYAnchor.constraint(equalTo: inner.centerYAnchor),
+            addressBox.heightAnchor.constraint(equalToConstant: 30),
             addressBox.widthAnchor.constraint(greaterThanOrEqualToConstant: 240),
             addressBox.widthAnchor.constraint(lessThanOrEqualToConstant: 4000),
         ])
@@ -253,7 +282,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.toggleSidebar, .sidebarTrackingSeparator, .address]
+        [.address]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -619,6 +648,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     // MARK: Menu actions (reached through the responder chain)
 
+    /// ⌃⌘S: shows or hides the tab list.
+    @objc func toggleTabList(_ sender: Any?) {
+        tabListItem.animator().isCollapsed.toggle()
+    }
+
     @objc func newTab(_ sender: Any?) {
         openTab(url: nil, container: current?.containerID, at: selected + 1)
     }
@@ -899,7 +933,7 @@ final class TabCell: NSTableCellView {
         stripe.wantsLayer = true
         stripe.layer?.cornerRadius = 1.5
         title.lineBreakMode = .byTruncatingTail
-        title.font = .systemFont(ofSize: 13)
+        title.font = .systemFont(ofSize: 14)
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         spinner.style = .spinning
         spinner.controlSize = .small
@@ -1009,5 +1043,16 @@ enum ContainerMenus {
             item.tag = tag
             menu.addItem(item)
         }
+    }
+}
+
+/// The tab list: a middle click on a tab closes it.
+final class TabTableView: NSTableView {
+    var onMiddleClick: ((Int) -> Void)?
+
+    override func otherMouseUp(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { return super.otherMouseUp(with: event) }
+        let row = self.row(at: convert(event.locationInWindow, from: nil))
+        if row >= 0 { onMiddleClick?(row) }
     }
 }

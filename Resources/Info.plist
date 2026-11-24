@@ -10,6 +10,8 @@
 	<string>Twinkle</string>
 	<key>CFBundleIdentifier</key>
 	<string>dev.twinkle.Twinkle</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
