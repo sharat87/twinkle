@@ -18,6 +18,9 @@ public struct Settings: Codable, Equatable, Sendable {
     public var filterLists: [String]
     /// How often the filter lists are downloaded again.
     public var filterListRefreshDays: Double
+    /// Background tabs left alone this long are unloaded to free memory, and
+    /// load again (with their history) when clicked. 0 turns it off.
+    public var unloadTabsAfterMinutes: Double
 
     public static let defaultFilterLists = [
         "https://easylist.to/easylist/easylist.txt",
@@ -32,11 +35,12 @@ public struct Settings: Codable, Equatable, Sendable {
         adBlockingOffFor = []
         filterLists = Settings.defaultFilterLists
         filterListRefreshDays = 4
+        unloadTabsAfterMinutes = 30
     }
 
     enum CodingKeys: String, CodingKey {
         case searchURL, windowTitleFormat, downloadsDirectory, adBlocking,
-             adBlockingOffFor, filterLists, filterListRefreshDays
+             adBlockingOffFor, filterLists, filterListRefreshDays, unloadTabsAfterMinutes
     }
 
     public init(from decoder: Decoder) throws {
@@ -49,15 +53,13 @@ public struct Settings: Codable, Equatable, Sendable {
         adBlockingOffFor = try c.decodeIfPresent([String].self, forKey: .adBlockingOffFor) ?? d.adBlockingOffFor
         filterLists = try c.decodeIfPresent([String].self, forKey: .filterLists) ?? d.filterLists
         filterListRefreshDays = try c.decodeIfPresent(Double.self, forKey: .filterListRefreshDays) ?? d.filterListRefreshDays
+        unloadTabsAfterMinutes = try c.decodeIfPresent(Double.self, forKey: .unloadTabsAfterMinutes) ?? d.unloadTabsAfterMinutes
     }
 
     /// Whether the blocker should run on pages from `host`.
     public func blocks(on host: String?) -> Bool {
         guard adBlocking else { return false }
-        guard let host = host?.lowercased(), !host.isEmpty else { return true }
-        return !adBlockingOffFor.contains { off in
-            let off = off.lowercased()
-            return host == off || host.hasSuffix("." + off)
-        }
+        guard let host, !host.isEmpty else { return true }
+        return !adBlockingOffFor.contains { Hosts.covers($0, host) }
     }
 }

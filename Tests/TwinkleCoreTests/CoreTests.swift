@@ -189,3 +189,34 @@ let ddg = "https://duckduckgo.com/?q=%s"
         #expect(result.rules.count > 30)
     }
 }
+
+@Suite struct ContainerSiteTests {
+    let personal = Container(name: "Personal", color: "#3B82F6", sites: ["example.com"])
+    let work = Container(name: "Work", color: "#F97316", sites: ["mail.example.com", "corp.io"])
+    var list: ContainerList { ContainerList(containers: [personal, work]) }
+
+    @Test func subdomainsAndMostSpecificWins() {
+        #expect(list.container(forHost: "example.com")?.name == "Personal")
+        #expect(list.container(forHost: "www.example.com")?.name == "Personal")
+        #expect(list.container(forHost: "mail.example.com")?.name == "Work")
+        #expect(list.container(forHost: "a.mail.example.com")?.name == "Work")
+        #expect(list.container(forHost: "WWW.CORP.IO.")?.name == "Work")
+        #expect(list.container(forHost: "notexample.com") == nil)
+        #expect(list.container(forHost: nil) == nil)
+    }
+
+    @Test func assignMovesTheSite() {
+        var l = list
+        l.assign(host: "www.corp.io", to: personal.id)
+        #expect(l.containers[0].sites == ["example.com", "corp.io"])
+        #expect(l.containers[1].sites == ["mail.example.com"])
+        l.assign(host: "corp.io", to: nil)
+        #expect(l.container(forHost: "corp.io") == nil)
+    }
+
+    @Test func oldFilesWithoutSitesStillLoad() throws {
+        let json = ##"{"containers":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Old","color":"#22C55E"}]}"##
+        let l = try JSONDecoder().decode(ContainerList.self, from: Data(json.utf8))
+        #expect(l.containers[0].sites == [])
+    }
+}

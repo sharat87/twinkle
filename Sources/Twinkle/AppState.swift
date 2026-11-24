@@ -90,17 +90,60 @@ final class AppState {
 
     func container(_ id: UUID?) -> Container? {
         guard let id else { return nil }
-        return containers.first { $0.id == id }
+        return containers.first { $0.id == id } ?? temporaries.first { $0.id == id }
+    }
+
+    /// The container a site always opens in, from the containers' `sites`.
+    func assignment(forHost host: String?) -> (container: Container, site: String)? {
+        ContainerList(containers: containers).assignment(forHost: host)
+    }
+
+    /// Makes `host`'s site always open in `container` (nil: in whatever
+    /// container the tab is in) and saves containers.json.
+    func assign(host: String, to container: UUID?) {
+        var list = ContainerList(containers: containers)
+        list.assign(host: host, to: container)
+        saveContainers(list.containers)
+    }
+
+    private func saveContainers(_ list: [Container]) {
+        containers = list
+        try? files.save(ContainerList(containers: containers), to: Self.containersFile)
+        containersDate = files.modificationDate(Self.containersFile)
+        NotificationCenter.default.post(name: .containersChanged, object: nil)
+    }
+
+    // MARK: Temporary containers
+
+    /// Containers that live only in memory: their cookies and storage are
+    /// never written to disk and are gone once their last tab closes. Their
+    /// tabs aren't saved in the session.
+    private(set) var temporaries: [Container] = []
+    private var temporaryCount = 0
+
+    func newTemporaryContainer() -> Container {
+        temporaryCount += 1
+        let container = Container(name: "Temporary \(temporaryCount)", color: "#8E8E93")
+        temporaries.append(container)
+        return container
+    }
+
+    func isTemporary(_ id: UUID?) -> Bool {
+        guard let id else { return false }
+        return temporaries.contains { $0.id == id }
+    }
+
+    /// Forgets a temporary container, and with it its data store.
+    func releaseTemporary(_ id: UUID) {
+        temporaries.removeAll { $0.id == id }
+        stores[id] = nil
     }
 
     @discardableResult
     func addContainer(named name: String) -> Container {
         let list = ContainerList(containers: containers)
         let container = Container(name: name, color: list.nextColor())
-        containers.append(container)
-        try? files.save(ContainerList(containers: containers), to: Self.containersFile)
-        containersDate = files.modificationDate(Self.containersFile)
-        NotificationCenter.default.post(name: .containersChanged, object: nil)
+        saveContainers(containers + [container])
         return container
     }
 
@@ -110,7 +153,7 @@ final class AppState {
     func dataStore(for id: UUID?) -> WKWebsiteDataStore {
         guard let id else { return .default() }
         if let store = stores[id] { return store }
-        let store = WKWebsiteDataStore(forIdentifier: id)
+        let store = isTemporary(id) ? WKWebsiteDataStore.nonPersistent() : WKWebsiteDataStore(forIdentifier: id)
         stores[id] = store
         return store
     }

@@ -18,7 +18,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     private(set) var tabs: [Tab] = []
     private var selected = -1
-    private var closedTabs: [SavedTab] = []
+    private var closedTabs: [(tab: SavedTab, temporary: Bool)] = []
+    private var unloadTimer: Timer?
 
     private let split = NSSplitViewController()
     private let table = NSTableView()
@@ -94,6 +95,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             }
         }
         installKeyMonitor()
+        unloadTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.unloadIdleTabs() }
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -268,9 +272,18 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     // MARK: Tabs
 
+    /// Opens a tab. A site assigned to a container opens in that container,
+    /// unless `exempt` (the tab is going where you put it yourself).
     @discardableResult
-    func openTab(url: URL?, container: UUID?, at index: Int? = nil, select: Bool = true, title: String = "") -> Tab {
+    func openTab(url: URL?, container: UUID?, at index: Int? = nil, select: Bool = true, title: String = "",
+                 exempt: Bool = false) -> Tab {
+        var container = container
+        var exemptSite: String?
+        if let assignment = AppState.shared.assignment(forHost: url?.host()), assignment.container.id != container {
+            if exempt { exemptSite = assignment.site } else { container = assignment.container.id }
+        }
         let tab = Tab(url: url, title: title, container: container, host: self)
+        tab.exemptSite = exemptSite
         let at = min(index ?? tabs.count, tabs.count)
         tabs.insert(tab, at: at)
         if at <= selected { selected += 1 }
@@ -284,6 +297,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         guard tabs.indices.contains(index) else { return }
         let tab = tabs[index]
         let changed = index != selected || pageArea.subviews.first !== tab.webView
+        if changed { current?.markActive() }
         selected = index
         if changed {
             pageArea.subviews.forEach { $0.removeFromSuperview() }
@@ -306,12 +320,16 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     func closeTab(at index: Int) {
         guard tabs.indices.contains(index) else { return }
         let tab = tabs[index]
+        let temporary = AppState.shared.isTemporary(tab.containerID)
         if let saved = tab.saved {
-            closedTabs.append(saved)
+            closedTabs.append((saved, temporary))
             if closedTabs.count > 50 { closedTabs.removeFirst() }
         }
         tab.close()
         tabs.remove(at: index)
+        if temporary, let id = tab.containerID, !tabs.contains(where: { $0.containerID == id }) {
+            AppState.shared.releaseTemporary(id)
+        }
 
         if tabs.isEmpty {
             selected = -1
@@ -399,6 +417,19 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         if let i = index(of: tab), i != selected { select(i) }
     }
 
+    /// A fresh tab is replaced by one in the right container; a tab with a
+    /// page keeps it, and the site opens in a new tab beside it.
+    func tab(_ tab: Tab, open url: URL, inAssigned container: UUID) {
+        guard let i = index(of: tab) else { return }
+        let fresh = tab.webView?.backForwardList.currentItem == nil
+        let front = i == selected
+        openTab(url: url, container: container, at: i + 1, select: front)
+        if fresh {
+            closeTab(at: i)
+            if front { select(i) }
+        }
+    }
+
     // MARK: Table
 
     func numberOfRows(in tableView: NSTableView) -> Int { tabs.count }
@@ -461,8 +492,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         menu.addItem(item("Copy Address", #selector(copyRowAddress(_:))))
         let move = NSMenuItem(title: "Reopen in Container", action: nil, keyEquivalent: "")
         move.submenu = ContainerMenus.make(action: #selector(reopenRowInContainer(_:)), target: self, tag: row,
-                                            current: tabs[row].containerID, shortcuts: false)
+                                            current: tabs[row].containerID, shortcuts: false, temporary: true)
         menu.addItem(move)
+        if !tabs[row].isUnloaded, !tabs[row].isBlank, row != selected {
+            menu.addItem(item("Unload Tab", #selector(unloadRow(_:))))
+        }
         menu.addItem(.separator())
         menu.addItem(item("Close Tab", #selector(closeRow(_:))))
     }
@@ -475,7 +509,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     @objc private func duplicateRow(_ sender: NSMenuItem) {
         guard tabs.indices.contains(sender.tag) else { return }
         let tab = tabs[sender.tag]
-        openTab(url: tab.url, container: tab.containerID, at: sender.tag + 1, title: tab.title)
+        openTab(url: tab.url, container: tab.containerID, at: sender.tag + 1, title: tab.title, exempt: true)
     }
 
     @objc private func copyRowAddress(_ sender: NSMenuItem) {
@@ -485,7 +519,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     @objc private func reopenRowInContainer(_ sender: NSMenuItem) {
-        reopen(at: sender.tag, in: sender.representedObject as? UUID)
+        reopen(at: sender.tag, in: ContainerMenus.choice(sender))
+    }
+
+    @objc private func unloadRow(_ sender: NSMenuItem) {
+        guard tabs.indices.contains(sender.tag), sender.tag != selected else { return }
+        tabs[sender.tag].unload()
     }
 
     @objc private func closeRow(_ sender: NSMenuItem) {
@@ -499,7 +538,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         let tab = tabs[row]
         guard tab.containerID != container else { return }
         let wasSelected = row == selected
-        openTab(url: tab.url, container: container, at: row + 1, select: wasSelected, title: tab.title)
+        openTab(url: tab.url, container: container, at: row + 1, select: wasSelected, title: tab.title, exempt: true)
         closeTab(at: row)
         if wasSelected { select(row) }
     }
@@ -585,11 +624,31 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     @objc func newTabInContainer(_ sender: NSMenuItem) {
-        openTab(url: nil, container: sender.representedObject as? UUID, at: selected + 1)
+        openTab(url: nil, container: ContainerMenus.choice(sender), at: selected + 1)
+    }
+
+    @objc func newTemporaryTab(_ sender: Any?) {
+        openTab(url: nil, container: AppState.shared.newTemporaryContainer().id, at: selected + 1)
     }
 
     @objc func reopenInContainer(_ sender: NSMenuItem) {
-        reopen(at: selected, in: sender.representedObject as? UUID)
+        reopen(at: selected, in: ContainerMenus.choice(sender))
+    }
+
+    /// Tools › Always Open This Site In: assigns the current site and moves
+    /// the tab there.
+    @objc func assignSite(_ sender: NSMenuItem) {
+        guard let host = current?.url?.host() else { return }
+        let container = sender.representedObject as? UUID
+        AppState.shared.assign(host: host, to: container)
+        let name = AppState.shared.container(container)?.name
+        let site = Hosts.siteKey(host)
+        Status.show(name.map { "\(site) will always open in \($0)." } ?? "\(site) opens in any container.")
+        if let container, container != current?.containerID {
+            reopen(at: selected, in: container)
+        } else {
+            current?.exemptSite = nil
+        }
     }
 
     @objc func closeCurrentTab(_ sender: Any?) {
@@ -597,8 +656,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     @objc func reopenClosedTab(_ sender: Any?) {
-        guard let saved = closedTabs.popLast(), let url = URL(string: saved.url) else { return }
-        openTab(url: url, container: saved.container, at: selected + 1, title: saved.title)
+        guard let (saved, temporary) = closedTabs.popLast(), let url = URL(string: saved.url) else { return }
+        // A closed temporary container's data is gone; a new one stands in.
+        var container = saved.container
+        if temporary, AppState.shared.container(container) == nil {
+            container = AppState.shared.newTemporaryContainer().id
+        }
+        openTab(url: url, container: container, at: selected + 1, title: saved.title, exempt: true)
     }
 
     @objc func focusAddress(_ sender: Any?) {
@@ -671,7 +735,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             if settings.blocks(on: host) {
                 s.adBlockingOffFor.append(host)
             } else {
-                s.adBlockingOffFor.removeAll { host == $0 || host.hasSuffix("." + $0) }
+                s.adBlockingOffFor.removeAll { Hosts.covers($0, host) }
             }
         }
         if let webView = current?.webView {
@@ -700,8 +764,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         case #selector(copyAddress(_:)): return current?.url != nil
         case #selector(reopenClosedTab(_:)): return !closedTabs.isEmpty
         case #selector(reopenInContainer(_:)):
-            item.state = (item.representedObject as? UUID) == current?.containerID ? .on : .off
+            item.state = ContainerMenus.isCurrent(item, current?.containerID) ? .on : .off
             return current?.url != nil
+        case #selector(assignSite(_:)):
+            let host = current?.url?.host()
+            let assigned = AppState.shared.assignment(forHost: host)?.container.id
+            item.state = (item.representedObject as? UUID) == assigned ? .on : .off
+            return host != nil
         case #selector(toggleBlockingForSite(_:)):
             let host = current?.url?.host()
             let on = AppState.shared.settings.blocks(on: host)
@@ -721,6 +790,23 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             guard flags.contains(.control), !flags.contains(.command) else { return event }
             if flags.contains(.shift) { self.previousTab(nil) } else { self.nextTab(nil) }
             return nil
+        }
+    }
+
+    // MARK: Unloading
+
+    /// Every minute: background tabs idle longer than the setting give up
+    /// their web view. Not tabs playing sound, recording, loading, or with
+    /// a half-filled form.
+    private func unloadIdleTabs() {
+        let minutes = AppState.shared.settings.unloadTabsAfterMinutes
+        guard minutes > 0 else { return }
+        let cutoff = Date().addingTimeInterval(-minutes * 60)
+        for (i, tab) in tabs.enumerated() where i != selected && tab.webView != nil && tab.lastActive < cutoff {
+            tab.canUnload { [weak self, weak tab] ok in
+                guard ok, let self, let tab, tab !== self.current else { return }
+                tab.unload()
+            }
         }
     }
 
@@ -755,7 +841,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         let session = (try? AppState.shared.files.load(Session.self, from: AppState.sessionFile)) ?? nil
         for saved in session?.tabs ?? [] {
             guard let url = URL(string: saved.url) else { continue }
-            tabs.append(Tab(url: url, title: saved.title, container: saved.container, host: self))
+            let tab = Tab(url: url, title: saved.title, container: saved.container, host: self)
+            // Restored where you left it, even if the site is assigned elsewhere.
+            if let assignment = AppState.shared.assignment(forHost: url.host()), assignment.container.id != saved.container {
+                tab.exemptSite = assignment.site
+            }
+            tabs.append(tab)
         }
         table.reloadData()
         if tabs.isEmpty {
@@ -782,7 +873,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             // The selected tab, or the first saved one after it if it isn't
             // saved itself (a blank tab); restore clamps it.
             if i == selected { selectedSaved = saved.count }
-            if let s = tab.saved { saved.append(s) }
+            // Temporary containers don't outlive the app, nor do their tabs.
+            if !AppState.shared.isTemporary(tab.containerID), let s = tab.saved { saved.append(s) }
         }
         try? AppState.shared.files.save(Session(tabs: saved, selected: selectedSaved), to: AppState.sessionFile)
     }
@@ -797,6 +889,7 @@ final class TabCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("TabCell")
 
     private let stripe = NSView()
+    private let favicon = NSImageView()
     private let title = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
 
@@ -812,7 +905,8 @@ final class TabCell: NSTableCellView {
         spinner.controlSize = .small
         spinner.isDisplayedWhenStopped = false
         textField = title
-        for v in [stripe, title, spinner] {
+        favicon.imageScaling = .scaleProportionallyUpOrDown
+        for v in [stripe, favicon, title, spinner] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
@@ -821,7 +915,11 @@ final class TabCell: NSTableCellView {
             stripe.widthAnchor.constraint(equalToConstant: 3),
             stripe.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             stripe.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
-            title.leadingAnchor.constraint(equalTo: stripe.trailingAnchor, constant: 8),
+            favicon.leadingAnchor.constraint(equalTo: stripe.trailingAnchor, constant: 7),
+            favicon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            favicon.widthAnchor.constraint(equalToConstant: 16),
+            favicon.heightAnchor.constraint(equalToConstant: 16),
+            title.leadingAnchor.constraint(equalTo: favicon.trailingAnchor, constant: 7),
             title.centerYAnchor.constraint(equalTo: centerYAnchor),
             spinner.leadingAnchor.constraint(greaterThanOrEqualTo: title.trailingAnchor, constant: 4),
             spinner.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
@@ -833,8 +931,17 @@ final class TabCell: NSTableCellView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    private static let placeholder: NSImage? = {
+        let image = NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
+        return image?.withSymbolConfiguration(.init(paletteColors: [.tertiaryLabelColor]))
+    }()
+
     func show(_ tab: Tab) {
         title.stringValue = tab.title
+        // Unloaded tabs are dimmed; they load again when clicked.
+        title.textColor = tab.isUnloaded ? .secondaryLabelColor : .labelColor
+        favicon.image = tab.icon ?? Self.placeholder
+        favicon.alphaValue = tab.isUnloaded ? 0.5 : 1
         toolTip = tab.url?.absoluteString
         if let container = AppState.shared.container(tab.containerID) {
             stripe.layer?.backgroundColor = NSColor(hex: container.color).cgColor
@@ -850,16 +957,35 @@ final class TabCell: NSTableCellView {
 /// container's id in `representedObject`.
 @MainActor
 enum ContainerMenus {
+    /// `representedObject` of the "New Temporary Container" item.
+    static let temporaryChoice = "temporary"
+
     static func make(action: Selector, target: AnyObject?, tag: Int = 0, current: UUID? = nil,
-                     shortcuts: Bool) -> NSMenu {
+                     shortcuts: Bool, temporary: Bool = false) -> NSMenu {
         let menu = NSMenu()
-        fill(menu, action: action, target: target, tag: tag, shortcuts: shortcuts)
+        fill(menu, action: action, target: target, tag: tag, shortcuts: shortcuts, temporary: temporary)
+        for item in menu.items where isCurrent(item, current) { item.state = .on }
         return menu
     }
 
-    static func fill(_ menu: NSMenu, action: Selector, target: AnyObject?, tag: Int = 0, shortcuts: Bool) {
+    /// The container a menu item picks, making a temporary one if asked.
+    static func choice(_ item: NSMenuItem) -> UUID? {
+        if item.representedObject as? String == temporaryChoice {
+            return AppState.shared.newTemporaryContainer().id
+        }
+        return item.representedObject as? UUID
+    }
+
+    static func isCurrent(_ item: NSMenuItem, _ container: UUID?) -> Bool {
+        if item.representedObject as? String == temporaryChoice { return false }
+        if let id = item.representedObject as? UUID { return id == container }
+        return container == nil
+    }
+
+    static func fill(_ menu: NSMenu, action: Selector, target: AnyObject?, tag: Int = 0, shortcuts: Bool,
+                     temporary: Bool = false, noneTitle: String = "No Container") {
         menu.removeAllItems()
-        let none = NSMenuItem(title: "No Container", action: action, keyEquivalent: shortcuts ? "0" : "")
+        let none = NSMenuItem(title: noneTitle, action: action, keyEquivalent: shortcuts ? "0" : "")
         none.keyEquivalentModifierMask = [.control, .command]
         none.target = target
         none.tag = tag
@@ -870,6 +996,15 @@ enum ContainerMenus {
             item.keyEquivalentModifierMask = [.control, .command]
             item.representedObject = container.id
             item.image = .dot(NSColor(hex: container.color))
+            item.target = target
+            item.tag = tag
+            menu.addItem(item)
+        }
+        if temporary {
+            menu.addItem(.separator())
+            let item = NSMenuItem(title: "New Temporary Container", action: action, keyEquivalent: "")
+            item.representedObject = temporaryChoice
+            item.image = .dot(NSColor(hex: "#8E8E93"))
             item.target = target
             item.tag = tag
             menu.addItem(item)

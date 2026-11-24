@@ -6,6 +6,7 @@ import AppKit
 enum MainMenu {
     static let newTabInContainer = NSMenu(title: "New Tab in Container")
     static let reopenInContainer = NSMenu(title: "Reopen Tab in Container")
+    static let assignSite = NSMenu(title: "Always Open This Site In")
 
     static func build(app: AppDelegate) -> NSMenu {
         let main = NSMenu()
@@ -30,6 +31,7 @@ enum MainMenu {
         main.addItem(submenu("File", [
             item("New Tab", #selector(BrowserWindowController.newTab(_:)), "t"),
             newInContainer,
+            item("New Temporary Container Tab", #selector(BrowserWindowController.newTemporaryTab(_:)), "t", [.command, .option]),
             item("New Container…", #selector(BrowserWindowController.newContainer(_:)), "n", [.command, .shift]),
             item("Open Location…", #selector(BrowserWindowController.focusAddress(_:)), "l"),
             .separator(),
@@ -75,8 +77,11 @@ enum MainMenu {
 
         let reopen = NSMenuItem(title: "Reopen Tab in Container", action: nil, keyEquivalent: "")
         reopen.submenu = reopenInContainer
+        let assign = NSMenuItem(title: "Always Open This Site In", action: nil, keyEquivalent: "")
+        assign.submenu = assignSite
         main.addItem(submenu("Tools", [
             reopen,
+            assign,
             .separator(),
             item("Turn Off Ad Blocking for This Site", #selector(BrowserWindowController.toggleBlockingForSite(_:))),
             item("Reload Filter Lists", #selector(AppDelegate.reloadFilterLists(_:)), target: app),
@@ -109,9 +114,11 @@ enum MainMenu {
     /// shortcuts always match the file.
     static func rebuildContainerMenus() {
         ContainerMenus.fill(newTabInContainer, action: #selector(BrowserWindowController.newTabInContainer(_:)),
-                            target: nil, shortcuts: true)
+                            target: nil, shortcuts: true, temporary: true)
         ContainerMenus.fill(reopenInContainer, action: #selector(BrowserWindowController.reopenInContainer(_:)),
-                            target: nil, shortcuts: false)
+                            target: nil, shortcuts: false, temporary: true)
+        ContainerMenus.fill(assignSite, action: #selector(BrowserWindowController.assignSite(_:)),
+                            target: nil, shortcuts: false, noneTitle: "Any Container")
     }
 
     private static func submenu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {

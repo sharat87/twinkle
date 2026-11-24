@@ -11,6 +11,8 @@ protocol TabHost: AnyObject {
     func tab(_ tab: Tab, popupWith configuration: WKWebViewConfiguration) -> WKWebView?
     func tabWantsClose(_ tab: Tab)
     func reveal(_ tab: Tab)
+    /// The tab tried to go to a site that always opens in another container.
+    func tab(_ tab: Tab, open url: URL, inAssigned container: UUID)
 }
 
 /// One tab: a web view in one container. The web view is made on first
@@ -26,12 +28,29 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     private var savedTitle: String
     private var observations: [NSKeyValueObservation] = []
 
+    /// Opened by a page (window.open). Stays in its opener's container even
+    /// on assigned sites, since sign-in pop-ups talk back to their opener.
+    let isPopup: Bool
+    /// The `sites` entry this tab may stay on in its current container even
+    /// though the site is assigned elsewhere: set when you put it here
+    /// yourself (Reopen in Container, Duplicate, a restored session).
+    var exemptSite: String?
+    /// When the tab was last in front; idle tabs are unloaded.
+    private(set) var lastActive = Date()
+    /// Back/forward list and scroll position kept while unloaded.
+    private var unloadedState: Any?
+    private(set) var icon: NSImage?
+    /// Why the last unload check kept the tab, for debug.sh.
+    private(set) var unloadCheck = ""
+
     init(url: URL?, title: String = "", container: UUID?, host: TabHost) {
         self.pendingURL = url
         self.savedTitle = title
         self.containerID = container
         self.host = host
+        self.isPopup = false
         super.init()
+        icon = url.flatMap { Favicons.shared.cached(for: $0, container: container) }
     }
 
     /// A tab for a page opened by another (window.open, target=_blank).
@@ -42,6 +61,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         self.savedTitle = ""
         self.containerID = container
         self.host = host
+        self.isPopup = true
         super.init()
         webView = makeWebView(configuration: popupConfiguration)
     }
@@ -62,7 +82,9 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     var isLoading: Bool { webView?.isLoading ?? false }
     var progress: Double { webView?.estimatedProgress ?? 0 }
     var isBlank: Bool { url == nil }
+    var isUnloaded: Bool { webView == nil && !isBlank }
 
+    /// For the session and the closed-tabs list.
     var saved: SavedTab? {
         guard let url, let scheme = url.scheme?.lowercased(), ["http", "https", "file"].contains(scheme) else { return nil }
         return SavedTab(url: url.absoluteString, title: title, container: containerID)
@@ -72,14 +94,90 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     /// The web view to show, made and loaded now if it wasn't yet.
     func viewForDisplay() -> WKWebView? {
-        if webView == nil, pendingURL != nil {
+        lastActive = Date()
+        if webView == nil, let state = unloadedState {
+            unloadedState = nil
+            let webView = makeWebView(configuration: nil)
+            self.webView = webView
+            webView.interactionState = state
+            if webView.url == nil { loadPending() } else { pendingURL = nil }
+        } else if webView == nil, pendingURL != nil {
             webView = makeWebView(configuration: nil)
             loadPending()
         }
         return webView
     }
 
+    func markActive() { lastActive = Date() }
+
+    /// Whether the tab may be unloaded: not loading, not playing or
+    /// recording anything, and no half-filled form on the page.
+    func canUnload(_ done: @escaping (Bool) -> Void) {
+        guard let webView, !isPopup, !webView.isLoading, webView.url != nil,
+              webView.cameraCaptureState == .none, webView.microphoneCaptureState == .none else {
+            unloadCheck = "busy"
+            done(false)
+            return
+        }
+        webView.requestMediaPlaybackState { state in
+            webView.evaluateJavaScript(Self.keepLoadedScript, in: nil, in: .defaultClient) { result in
+                let answer = (try? result.get()) as? [Any] ?? []
+                let media = answer.first as? String ?? "?"
+                let edited = answer.count > 1 ? answer[1] as? Bool ?? true : true
+                // The page's own media is checked directly, so a muted
+                // autoplaying background video doesn't pin the tab. Playback
+                // with no playing element in the page is sound from a frame
+                // or Web Audio, which is kept.
+                let sound = media == "audible" || (state == .playing && media != "muted")
+                self.unloadCheck = "playback \(state.rawValue), media \(media), edited \(edited)"
+                done(!sound && !edited)
+            }
+        }
+    }
+
+    /// `[media, edited]`: media is "audible", "muted" (only muted media
+    /// playing) or "none"; edited is whether a field has unsent text or a
+    /// box was ticked. Runs in Twinkle's own script world, out of the page's
+    /// sight.
+    private static let keepLoadedScript = """
+    (() => {
+      // Media in open shadow roots and same-origin frames counts too.
+      const media = (root, out = []) => {
+        out.push(...root.querySelectorAll('video, audio'));
+        for (const el of root.querySelectorAll('*')) {
+          if (el.shadowRoot) media(el.shadowRoot, out);
+          if (el.tagName === 'IFRAME') { try { if (el.contentDocument) media(el.contentDocument, out); } catch (e) {} }
+        }
+        return out;
+      };
+      const playing = media(document).filter(m => !m.paused && !m.ended);
+      const state = playing.some(m => !m.muted && m.volume > 0) ? 'audible' : playing.length ? 'muted' : 'none';
+      let edited = false;
+      for (const e of document.querySelectorAll('input, textarea, select')) {
+        if (['hidden', 'submit', 'button', 'reset', 'image'].includes(e.type)) continue;
+        if (e.type === 'checkbox' || e.type === 'radio') edited ||= e.checked !== e.defaultChecked;
+        else if (e.tagName === 'SELECT') edited ||= [...e.options].some(o => o.selected !== o.defaultSelected);
+        else edited ||= e.value !== e.defaultValue;
+      }
+      const a = document.activeElement;
+      edited ||= !!(a && a.isContentEditable);
+      return [state, edited];
+    })()
+    """
+
+    /// Frees the web view (and its process), keeping the address, title and
+    /// back/forward list; it loads again when shown.
+    func unload() {
+        guard let webView else { return }
+        unloadedState = webView.interactionState
+        pendingURL = webView.url
+        if let t = webView.title, !t.isEmpty { savedTitle = t }
+        close()
+        host?.tabDidChange(self)
+    }
+
     func load(_ url: URL) {
+        unloadedState = nil
         if webView == nil {
             pendingURL = url
             webView = makeWebView(configuration: nil)
@@ -181,9 +279,27 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         }
 
         if action.targetFrame?.isMainFrame == true {
+            if let assigned = assignedElsewhere(url, action: action) {
+                host?.tab(self, open: url, inAssigned: assigned)
+                decisionHandler(.cancel)
+                return
+            }
             Blocker.shared.tune(webView.configuration.userContentController, host: url.host())
         }
         decisionHandler(.allow)
+    }
+
+    /// The container `url` should open in instead of this tab's, if any.
+    /// Only plain page loads move: not form posts, reloads or back/forward,
+    /// and not pop-ups or sites you put in this container yourself.
+    private func assignedElsewhere(_ url: URL, action: WKNavigationAction) -> UUID? {
+        guard !isPopup, ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+              (action.request.httpMethod ?? "GET").uppercased() == "GET",
+              ![.backForward, .reload, .formResubmitted, .formSubmitted].contains(action.navigationType),
+              let assignment = AppState.shared.assignment(forHost: url.host()),
+              assignment.container.id != containerID,
+              assignment.site != exemptSite else { return nil }
+        return assignment.container.id
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
@@ -208,6 +324,27 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
         Downloads.shared.track(download)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard let page = webView.url, ["http", "https"].contains(page.scheme ?? "") else { return }
+        webView.evaluateJavaScript(Favicons.linksScript) { [weak self] value, _ in
+            let links = (value as? [[String]]) ?? []
+            Favicons.shared.load(for: page, links: links, container: self?.containerID) { image in
+                guard let self, let image, self.webView?.url?.host() == page.host() else { return }
+                self.icon = image
+                self.host?.tabDidChange(self)
+            }
+        }
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // A new site: the old site's icon no longer applies.
+        if let icon = webView.url.flatMap({ Favicons.shared.cached(for: $0, container: containerID) }) {
+            self.icon = icon
+        } else if webView.url?.host() != nil {
+            icon = nil
+        }
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {

@@ -14,6 +14,7 @@ import WebKit
 enum Debug {
     static let notification = Notification.Name("dev.twinkle.debug.dump")
     static let openNotification = Notification.Name("dev.twinkle.debug.open")
+    static let selectNotification = Notification.Name("dev.twinkle.debug.select")
 
     static func install(_ controller: @escaping () -> BrowserWindowController?) {
         DistributedNotificationCenter.default().addObserver(forName: notification, object: nil, queue: .main) { _ in
@@ -29,10 +30,17 @@ enum Debug {
                 let parts = request.split(separator: "\t", maxSplits: 1).map(String.init)
                 guard let c = controller(), let first = parts.first, let url = URL(string: first),
                       ["http", "https"].contains(url.scheme ?? "") else { return }
-                let name = parts.count > 1 ? parts[1] : ""
-                let container = AppState.shared.containers.first { $0.name.lowercased() == name.lowercased() }
+                let name = parts.count > 1 ? parts[1].lowercased() : ""
+                let container = name == "temporary"
+                    ? AppState.shared.newTemporaryContainer()
+                    : AppState.shared.containers.first { $0.name.lowercased() == name }
                 c.openTab(url: url, container: container?.id)
             }
+        }
+        // `./debug.sh select <index>`
+        DistributedNotificationCenter.default().addObserver(forName: selectNotification, object: nil, queue: .main) { note in
+            let index = Int(note.object as? String ?? "") ?? -1
+            MainActor.assumeIsolated { controller()?.select(index) }
         }
     }
 
@@ -108,6 +116,10 @@ extension BrowserWindowController {
                     "loading": tab.isLoading,
                     "progress": tab.progress,
                     "hasWebView": tab.webView != nil,
+                    "unloaded": tab.isUnloaded,
+                    "hasIcon": tab.icon != nil,
+                    "exemptSite": tab.exemptSite ?? "",
+                    "unloadCheck": tab.unloadCheck,
                     "container": AppState.shared.container(tab.containerID)?.name ?? "",
                 ]
             },
