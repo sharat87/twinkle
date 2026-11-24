@@ -220,3 +220,27 @@ let ddg = "https://duckduckgo.com/?q=%s"
         #expect(l.containers[0].sites == [])
     }
 }
+
+@Suite struct ZoomTests {
+    @Test func steps() {
+        #expect(ZoomLevels.step(from: 1, in: true) == 1.1)
+        #expect(ZoomLevels.step(from: 1, in: false) == 0.9)
+        #expect(ZoomLevels.step(from: 1.2, in: true) == 1.25)
+        #expect(ZoomLevels.step(from: 3, in: true) == 3)
+        #expect(ZoomLevels.step(from: 0.5, in: false) == 0.5)
+    }
+
+    @Test func perSite() throws {
+        var z = ZoomLevels()
+        #expect(z.set(1.25, forHost: "www.example.com") == "example.com")
+        #expect(z.level(forHost: "example.com") == 1.25)
+        #expect(z.level(forHost: "docs.example.com") == 1.25)
+        #expect(z.level(forHost: "other.com") == 1)
+        z.set(1.5, forHost: "docs.example.com")
+        #expect(z.sites == ["example.com": 1.5])
+        z.set(1, forHost: "example.com")
+        #expect(z.sites.isEmpty)
+        let file = try JSONDecoder().decode(ZoomLevels.self, from: Data(#"{"a.com": 0.8}"#.utf8))
+        #expect(file.level(forHost: "a.com") == 0.8)
+    }
+}

@@ -27,6 +27,7 @@ final class AppState {
     static let settingsFile = "settings.json"
     static let containersFile = "containers.json"
     static let sessionFile = "session.json"
+    static let zoomFile = "zoom.json"
 
     private init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -156,6 +157,36 @@ final class AppState {
         let store = isTemporary(id) ? WKWebsiteDataStore.nonPersistent() : WKWebsiteDataStore(forIdentifier: id)
         stores[id] = store
         return store
+    }
+
+    // MARK: Zoom
+
+    private var zoomLevelsCache: ZoomLevels?
+    private var zoomDate: Date?
+
+    /// zoom.json, re-read if it was edited by hand.
+    private var zoomLevels: ZoomLevels {
+        get {
+            let date = files.modificationDate(Self.zoomFile)
+            if zoomLevelsCache == nil || date != zoomDate {
+                zoomDate = date
+                zoomLevelsCache = (try? files.load(ZoomLevels.self, from: Self.zoomFile)) ?? zoomLevelsCache ?? ZoomLevels()
+            }
+            return zoomLevelsCache!
+        }
+        set {
+            zoomLevelsCache = newValue
+            try? files.save(newValue, to: Self.zoomFile)
+            zoomDate = files.modificationDate(Self.zoomFile)
+        }
+    }
+
+    func zoom(forHost host: String?) -> Double {
+        zoomLevels.level(forHost: host)
+    }
+
+    func setZoom(_ level: Double, forHost host: String) {
+        zoomLevels.set(level, forHost: host)
     }
 
     var downloadsDirectory: URL {

@@ -62,7 +62,8 @@ enum MainMenu {
             item("Reload from Origin", #selector(BrowserWindowController.reloadFromOrigin(_:)), "r", [.command, .option]),
             item("Stop", #selector(BrowserWindowController.stopLoading(_:)), "."),
             .separator(),
-            item("Zoom In", #selector(BrowserWindowController.zoomIn(_:)), "="),
+            item("Zoom In", #selector(BrowserWindowController.zoomIn(_:)), "+"),
+            hidden(item("Zoom In", #selector(BrowserWindowController.zoomIn(_:)), "=")),
             item("Zoom Out", #selector(BrowserWindowController.zoomOut(_:)), "-"),
             item("Actual Size", #selector(BrowserWindowController.actualSize(_:)), "0"),
             .separator(),
@@ -119,6 +120,13 @@ enum MainMenu {
                             target: nil, shortcuts: false, temporary: true)
         ContainerMenus.fill(assignSite, action: #selector(BrowserWindowController.assignSite(_:)),
                             target: nil, shortcuts: false, noneTitle: "Any Container")
+    }
+
+    /// A second shortcut for the item above it: hidden, but its key works.
+    private static func hidden(_ item: NSMenuItem) -> NSMenuItem {
+        item.isHidden = true
+        item.allowsKeyEquivalentWhenHidden = true
+        return item
     }
 
     private static func submenu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {

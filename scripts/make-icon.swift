@@ -1,8 +1,9 @@
 // Draws Twinkle's app icon and writes an .icns.
 // Usage: swift scripts/make-icon.swift <out.icns>
 //
-// A night-sky squircle (deep indigo into violet) with one bright four-point
-// star and two small ones, in the macOS icon grid (824pt body on 1024).
+// A warm cream squircle with one bold glint: four long tapered rays, four
+// short diagonal ones, coral into amber. The macOS grid: an 824pt body on
+// a 1024 canvas.
 import AppKit
 
 let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon.icns"
@@ -40,46 +41,61 @@ func draw(size: Int) -> Data {
     let shape = NSBezierPath(roundedRect: body, xRadius: 185, yRadius: 185)
     NSGraphicsContext.saveGraphicsState()
     let shadow = NSShadow()
-    shadow.shadowColor = NSColor.black.withAlphaComponent(0.3)
+    shadow.shadowColor = NSColor.black.withAlphaComponent(0.28)
     shadow.shadowOffset = NSSize(width: 0, height: -10)
     shadow.shadowBlurRadius = 24
     shadow.set()
-    NSColor(srgbRed: 0.12, green: 0.10, blue: 0.30, alpha: 1).setFill()
+    NSColor.white.setFill()
     shape.fill()
     NSGraphicsContext.restoreGraphicsState()
 
     NSGraphicsContext.saveGraphicsState()
     shape.addClip()
     NSGradient(colors: [
-        NSColor(srgbRed: 0.07, green: 0.08, blue: 0.24, alpha: 1),
-        NSColor(srgbRed: 0.25, green: 0.16, blue: 0.52, alpha: 1),
-        NSColor(srgbRed: 0.62, green: 0.32, blue: 0.70, alpha: 1),
-    ], atLocations: [0, 0.6, 1], colorSpace: .sRGB)!.draw(in: body, angle: -60)
+        NSColor(srgbRed: 1.00, green: 0.98, blue: 0.94, alpha: 1),
+        NSColor(srgbRed: 0.99, green: 0.92, blue: 0.82, alpha: 1),
+    ])!.draw(in: body, angle: -90)
 
-    // A glow behind the main star.
-    let glowCenter = CGPoint(x: 540, y: 540)
-    NSGradient(colors: [NSColor(srgbRed: 1, green: 0.93, blue: 0.75, alpha: 0.45), .clear])!
-        .draw(fromCenter: glowCenter, radius: 0, toCenter: glowCenter, radius: 380, options: [])
+    let center = CGPoint(x: 512, y: 512)
+    let warm = NSGradient(colors: [
+        NSColor(srgbRed: 1.00, green: 0.42, blue: 0.36, alpha: 1),   // coral
+        NSColor(srgbRed: 1.00, green: 0.66, blue: 0.20, alpha: 1),   // amber
+    ])!
 
-    // Faint background stars.
-    for (x, y, r) in [(250.0, 760.0, 7.0), (330, 300, 5), (760, 260, 6), (800, 720, 4), (220, 470, 4), (640, 820, 5)] {
-        NSColor.white.withAlphaComponent(0.55).setFill()
-        NSBezierPath(ovalIn: NSRect(x: x - r, y: y - r, width: r * 2, height: r * 2)).fill()
+    // The glint: long rays up/down/left/right, short ones on the diagonals.
+    var parts = [star(center: center, radius: 330, waist: 0.13)]
+    for i in 0..<4 {
+        let a = CGFloat(i) * .pi / 2 + .pi / 4
+        let tip = CGPoint(x: center.x + cos(a) * 190, y: center.y + sin(a) * 190)
+        let ray = NSBezierPath()
+        let side = CGPoint(x: -sin(a) * 34, y: cos(a) * 34)
+        ray.move(to: CGPoint(x: center.x + side.x, y: center.y + side.y))
+        ray.line(to: tip)
+        ray.line(to: CGPoint(x: center.x - side.x, y: center.y - side.y))
+        ray.close()
+        parts.append(ray)
+    }
+    NSGraphicsContext.saveGraphicsState()
+    let glow = NSShadow()
+    glow.shadowColor = NSColor(srgbRed: 1, green: 0.55, blue: 0.3, alpha: 0.45)
+    glow.shadowBlurRadius = 40
+    glow.shadowOffset = .zero
+    glow.set()
+    NSColor(srgbRed: 1, green: 0.5, blue: 0.3, alpha: 1).setFill()
+    parts.forEach { $0.fill() }
+    NSGraphicsContext.restoreGraphicsState()
+    // Each part clipped on its own, one shared gradient: no seams, and
+    // overlaps don't cancel out.
+    for part in parts {
+        NSGraphicsContext.saveGraphicsState()
+        part.addClip()
+        warm.draw(in: NSRect(x: 180, y: 180, width: 664, height: 664), angle: 45)
+        NSGraphicsContext.restoreGraphicsState()
     }
 
-    // The main star, warm white with a light gradient.
-    let main = star(center: glowCenter, radius: 300, waist: 0.16)
-    NSGraphicsContext.saveGraphicsState()
-    main.addClip()
-    NSGradient(colors: [.white, NSColor(srgbRed: 1, green: 0.88, blue: 0.62, alpha: 1)])!
-        .draw(in: main.bounds, angle: -70)
-    NSGraphicsContext.restoreGraphicsState()
-
-    // Two small companions.
-    NSColor.white.setFill()
-    star(center: CGPoint(x: 290, y: 690), radius: 82, waist: 0.17).fill()
-    NSColor.white.withAlphaComponent(0.85).setFill()
-    star(center: CGPoint(x: 755, y: 330), radius: 56, waist: 0.17).fill()
+    // A bright core.
+    NSGradient(colors: [NSColor.white.withAlphaComponent(0.9), NSColor.white.withAlphaComponent(0)])!
+        .draw(fromCenter: center, radius: 0, toCenter: center, radius: 70, options: [])
     NSGraphicsContext.restoreGraphicsState()
 
     NSGraphicsContext.restoreGraphicsState()

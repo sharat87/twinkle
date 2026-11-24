@@ -6,6 +6,12 @@ extension NSPasteboard.PasteboardType {
     static let twinkleTab = NSPasteboard.PasteboardType("dev.twinkle.tab-row")
 }
 
+/// Twinkle's one text size, used for every piece of its own UI.
+enum UI {
+    static let textSize: CGFloat = 16
+    static let font = NSFont.systemFont(ofSize: textSize)
+}
+
 extension NSToolbarItem.Identifier {
     static let address = NSToolbarItem.Identifier("address")
 }
@@ -122,7 +128,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         table.headerView = nil
         table.style = .sourceList
         table.backgroundColor = .clear
-        table.rowHeight = 34
+        table.rowHeight = 40
         table.intercellSpacing = NSSize(width: 0, height: 2)
         table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         table.dataSource = self
@@ -149,7 +155,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         statusButton.isBordered = false
         statusButton.alignment = .left
         statusButton.lineBreakMode = .byTruncatingMiddle
-        statusButton.font = .systemFont(ofSize: 12)
+        statusButton.font = UI.font
         statusButton.contentTintColor = .secondaryLabelColor
         statusButton.target = self
         statusButton.action = #selector(revealStatusFile(_:))
@@ -183,7 +189,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         addressField.isBordered = false
         addressField.drawsBackground = false
         addressField.focusRingType = .none
-        addressField.font = .systemFont(ofSize: 14)
+        addressField.font = UI.font
         addressField.lineBreakMode = .byTruncatingTail
         addressField.usesSingleLineMode = true
         addressField.cell?.isScrollable = true
@@ -191,17 +197,17 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         addressField.action = #selector(addressEntered(_:))
         addressField.delegate = self
 
-        badge.font = .systemFont(ofSize: 12, weight: .medium)
+        badge.font = .systemFont(ofSize: UI.textSize, weight: .medium)
         badge.textColor = .white
         badge.translatesAutoresizingMaskIntoConstraints = false
         badgeBox.wantsLayer = true
-        badgeBox.layer?.cornerRadius = 5
+        badgeBox.layer?.cornerRadius = 7
         badgeBox.addSubview(badge)
         NSLayoutConstraint.activate([
             badge.leadingAnchor.constraint(equalTo: badgeBox.leadingAnchor, constant: 7),
             badge.trailingAnchor.constraint(equalTo: badgeBox.trailingAnchor, constant: -7),
             badge.centerYAnchor.constraint(equalTo: badgeBox.centerYAnchor),
-            badgeBox.heightAnchor.constraint(equalToConstant: 20),
+            badgeBox.heightAnchor.constraint(equalToConstant: 26),
             badgeBox.widthAnchor.constraint(greaterThanOrEqualToConstant: 4),
         ])
         badgeBox.isHidden = true
@@ -225,23 +231,24 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             row.leadingAnchor.constraint(equalTo: inner.leadingAnchor, constant: 8),
             row.trailingAnchor.constraint(equalTo: inner.trailingAnchor, constant: -10),
             row.centerYAnchor.constraint(equalTo: inner.centerYAnchor),
-            addressBox.heightAnchor.constraint(equalToConstant: 30),
+            addressBox.heightAnchor.constraint(equalToConstant: 34),
             addressBox.widthAnchor.constraint(greaterThanOrEqualToConstant: 240),
             addressBox.widthAnchor.constraint(lessThanOrEqualToConstant: 4000),
         ])
 
         findField.placeholderString = "Find on page"
+        findField.font = UI.font
         findField.delegate = self
         findField.target = self
         findField.action = #selector(findFieldEntered(_:))
         findField.sendsSearchStringImmediately = false
         findField.sendsWholeSearchString = true
-        findField.widthAnchor.constraint(equalToConstant: 260).isActive = true
+        findField.widthAnchor.constraint(equalToConstant: 320).isActive = true
         findResult.textColor = .secondaryLabelColor
-        findResult.font = .systemFont(ofSize: 12)
+        findResult.font = UI.font
         let done = NSButton(title: "Done", target: self, action: #selector(hideFind(_:)))
         done.bezelStyle = .rounded
-        done.controlSize = .small
+        done.font = UI.font
         findBar.orientation = .horizontal
         findBar.spacing = 8
         findBar.edgeInsets = NSEdgeInsets(top: 4, left: 10, bottom: 4, right: 10)
@@ -610,7 +617,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     @objc func showFind(_ sender: Any?) {
         findBar.isHidden = false
-        findBarHeight.constant = 34
+        findBarHeight.constant = 44
         window?.makeFirstResponder(findField)
         findField.currentEditor()?.selectAll(nil)
     }
@@ -727,16 +734,31 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     @objc func zoomIn(_ sender: Any?) {
         guard let webView = current?.webView else { return }
-        webView.pageZoom = min(webView.pageZoom + 0.1, 3)
+        setZoom(ZoomLevels.step(from: webView.pageZoom, in: true))
     }
 
     @objc func zoomOut(_ sender: Any?) {
         guard let webView = current?.webView else { return }
-        webView.pageZoom = max(webView.pageZoom - 0.1, 0.3)
+        setZoom(ZoomLevels.step(from: webView.pageZoom, in: false))
     }
 
     @objc func actualSize(_ sender: Any?) {
-        current?.webView?.pageZoom = 1
+        setZoom(1)
+    }
+
+    /// Zooms the page and remembers the level for its site, so the site's
+    /// other open tabs follow and it opens at this zoom next time.
+    /// Temporary containers zoom without leaving a trace in zoom.json.
+    private func setZoom(_ level: Double) {
+        guard let tab = current, let webView = tab.webView else { return }
+        webView.pageZoom = level
+        Status.show("Zoom \(Int((level * 100).rounded()))%")
+        guard let host = webView.url?.host(), !AppState.shared.isTemporary(tab.containerID) else { return }
+        AppState.shared.setZoom(level, forHost: host)
+        for other in tabs where other !== tab {
+            guard let view = other.webView, let h = view.url?.host() else { continue }
+            view.pageZoom = AppState.shared.zoom(forHost: h)
+        }
     }
 
     @objc func nextTab(_ sender: Any?) {
@@ -933,7 +955,7 @@ final class TabCell: NSTableCellView {
         stripe.wantsLayer = true
         stripe.layer?.cornerRadius = 1.5
         title.lineBreakMode = .byTruncatingTail
-        title.font = .systemFont(ofSize: 14)
+        title.font = UI.font
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         spinner.style = .spinning
         spinner.controlSize = .small
@@ -951,8 +973,8 @@ final class TabCell: NSTableCellView {
             stripe.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
             favicon.leadingAnchor.constraint(equalTo: stripe.trailingAnchor, constant: 7),
             favicon.centerYAnchor.constraint(equalTo: centerYAnchor),
-            favicon.widthAnchor.constraint(equalToConstant: 16),
-            favicon.heightAnchor.constraint(equalToConstant: 16),
+            favicon.widthAnchor.constraint(equalToConstant: 18),
+            favicon.heightAnchor.constraint(equalToConstant: 18),
             title.leadingAnchor.constraint(equalTo: favicon.trailingAnchor, constant: 7),
             title.centerYAnchor.constraint(equalTo: centerYAnchor),
             spinner.leadingAnchor.constraint(greaterThanOrEqualTo: title.trailingAnchor, constant: 4),

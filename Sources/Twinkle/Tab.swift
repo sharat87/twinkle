@@ -340,6 +340,9 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // Each site's remembered zoom, applied as its page arrives.
+        let zoom = AppState.shared.zoom(forHost: webView.url?.host())
+        if abs(webView.pageZoom - zoom) > 0.001 { webView.pageZoom = zoom }
         // A new site: the old site's icon no longer applies.
         if let icon = webView.url.flatMap({ Favicons.shared.cached(for: $0, container: containerID) }) {
             self.icon = icon
