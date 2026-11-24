@@ -244,3 +244,58 @@ let ddg = "https://duckduckgo.com/?q=%s"
         #expect(file.level(forHost: "a.com") == 0.8)
     }
 }
+
+@Suite struct HistoryTests {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func store() throws -> History {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("twinkle-\(UUID()).sqlite").path
+        return try History(path: path)
+    }
+
+    @Test func recordsAndCounts() throws {
+        let h = try store()
+        try h.recordVisit(url: "https://github.com/", title: "GitHub", at: now)
+        try h.recordVisit(url: "https://github.com/", title: "", at: now)
+        let found = try h.search("git", now: now)
+        #expect(found.count == 1)
+        #expect(found[0].visits == 2)
+        #expect(found[0].title == "GitHub")
+    }
+
+    @Test func everyWordMustMatch() throws {
+        let h = try store()
+        try h.recordVisit(url: "https://news.ycombinator.com/item?id=1", title: "Swift concurrency explained", at: now)
+        try h.recordVisit(url: "https://swift.org/", title: "Swift.org", at: now)
+        #expect(try h.search("swift concurrency", now: now).map(\.url) == ["https://news.ycombinator.com/item?id=1"])
+        #expect(try h.search("swift nothing", now: now).isEmpty)
+        #expect(try h.search("100%_", now: now).isEmpty)
+    }
+
+    @Test func typedAddressBeatsMentions() throws {
+        let h = try store()
+        let day = 86_400.0
+        for _ in 0..<20 { try h.recordVisit(url: "https://news.example.com/github-story", title: "Why github is down", at: now) }
+        try h.recordVisit(url: "https://github.com/", title: "GitHub", at: now.addingTimeInterval(-3 * day))
+        #expect(try h.search("gith", now: now).first?.url == "https://github.com/")
+    }
+
+    @Test func recentBeatsStaleAtEqualVisits() {
+        let old = HistoryEntry(url: "https://a.com/x", title: "", visits: 5, lastVisit: now.addingTimeInterval(-90 * 86_400))
+        let new = HistoryEntry(url: "https://a.com/y", title: "", visits: 5, lastVisit: now)
+        #expect(HistoryRanking.rank([old, new], words: ["a"], now: now).first == new)
+    }
+
+    @Test func forgetOld() throws {
+        let h = try store()
+        try h.recordVisit(url: "https://old.com/", title: "", at: now.addingTimeInterval(-400 * 86_400))
+        try h.recordVisit(url: "https://new.com/", title: "", at: now)
+        try h.forget(before: now.addingTimeInterval(-180 * 86_400))
+        #expect(try h.search("", now: now).map(\.url) == ["https://new.com/"])
+    }
+
+    @Test func sessionsWithoutTabIdsStillLoad() throws {
+        let s = try JSONDecoder().decode(Session.self, from: Data(#"{"selected":0,"tabs":[{"url":"https://a.com","title":"A"}]}"#.utf8))
+        #expect(s.tabs[0].url == "https://a.com")
+    }
+}

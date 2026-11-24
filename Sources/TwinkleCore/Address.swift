@@ -17,7 +17,7 @@ public enum Address {
         return URL(string: template.replacingOccurrences(of: "%s", with: encoded))
     }
 
-    static func asURL(_ input: String) -> URL? {
+    public static func asURL(_ input: String) -> URL? {
         let lower = input.lowercased()
         for prefix in ["about:", "data:", "file:"] where lower.hasPrefix(prefix) {
             return URL(string: input)

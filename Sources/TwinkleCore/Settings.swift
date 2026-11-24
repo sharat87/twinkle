@@ -21,6 +21,11 @@ public struct Settings: Codable, Equatable, Sendable {
     /// Background tabs left alone this long are unloaded to free memory, and
     /// load again (with their history) when clicked. 0 turns it off.
     public var unloadTabsAfterMinutes: Double
+    /// What ⌘L opens: "twinkle" (the field in the toolbar) or "alfred" (the
+    /// Twinkle Address workflow, see the README).
+    public var addressInput: String
+    /// How long history is kept. 0 keeps no history at all.
+    public var historyDays: Double
 
     public static let defaultFilterLists = [
         "https://easylist.to/easylist/easylist.txt",
@@ -36,11 +41,14 @@ public struct Settings: Codable, Equatable, Sendable {
         filterLists = Settings.defaultFilterLists
         filterListRefreshDays = 4
         unloadTabsAfterMinutes = 30
+        addressInput = "twinkle"
+        historyDays = 180
     }
 
     enum CodingKeys: String, CodingKey {
         case searchURL, windowTitleFormat, downloadsDirectory, adBlocking,
-             adBlockingOffFor, filterLists, filterListRefreshDays, unloadTabsAfterMinutes
+             adBlockingOffFor, filterLists, filterListRefreshDays, unloadTabsAfterMinutes,
+             addressInput, historyDays
     }
 
     public init(from decoder: Decoder) throws {
@@ -54,6 +62,8 @@ public struct Settings: Codable, Equatable, Sendable {
         filterLists = try c.decodeIfPresent([String].self, forKey: .filterLists) ?? d.filterLists
         filterListRefreshDays = try c.decodeIfPresent(Double.self, forKey: .filterListRefreshDays) ?? d.filterListRefreshDays
         unloadTabsAfterMinutes = try c.decodeIfPresent(Double.self, forKey: .unloadTabsAfterMinutes) ?? d.unloadTabsAfterMinutes
+        addressInput = try c.decodeIfPresent(String.self, forKey: .addressInput) ?? d.addressInput
+        historyDays = try c.decodeIfPresent(Double.self, forKey: .historyDays) ?? d.historyDays
     }
 
     /// Whether the blocker should run on pages from `host`.

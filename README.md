@@ -10,6 +10,7 @@ A small, fast web browser for macOS, built on the system's WebKit.
 - **Ad and tracker blocking** with EasyList and EasyPrivacy (or any EasyList/uBlock-syntax list, or hosts file), compiled into WebKit content blockers that run before requests are made.
 - **No permission prompts.** Camera, microphone and screen capture are always denied. Location and web notifications don't exist here.
 - **JSON responses pretty-printed** and highlighted, with exact numbers and key order (Raw shows the original).
+- **Alfred as the address bar** (optional): ⌘L hands the address to an Alfred workflow that searches your history and open tabs.
 - **Settings in plain files**, re-read whenever the app comes to the front.
 
 ## Build and run
@@ -34,6 +35,8 @@ Everything lives in `~/Library/Application Support/Twinkle/`:
 | `filters/custom.txt` | Your own filter rules. |
 | `filters/cache/` | Downloaded filter lists. |
 | `zoom.json` | Zoom level per site, like `{"example.com": 1.25}`. Covers subdomains. |
+| `history.sqlite` | Pages visited (address, title, visits, last visit), kept `historyDays`. Not written for temporary containers. History › Clear History empties it. |
+| `bin/twinkle-query` | Link to the Alfred helper in the running copy of the app. |
 | `favicons/` | Site icons for the tab list, one small PNG per host. Not written for temporary containers. |
 
 The Twinkle menu opens each of these. WebKit keeps each container's site data under `~/Library/WebKit/dev.twinkle.Twinkle/`.
@@ -52,11 +55,23 @@ The Twinkle menu opens each of these. WebKit keeps each container's site data un
     "https://easylist.to/easylist/easyprivacy.txt"
   ],
   "filterListRefreshDays": 4,
-  "unloadTabsAfterMinutes": 30
+  "unloadTabsAfterMinutes": 30,
+  "addressInput": "twinkle",
+  "historyDays": 180
 }
 ```
 
-`unloadTabsAfterMinutes: 0` keeps every tab loaded.
+`unloadTabsAfterMinutes: 0` keeps every tab loaded. `historyDays: 0` keeps no history.
+
+### Alfred as the address bar
+
+1. `./build.sh` also builds `build/Twinkle Address.alfredworkflow`; double-click it to install it in Alfred.
+2. Set `"addressInput": "alfred"` in settings.json.
+3. ⌘L in Twinkle now opens Alfred with the current address. The first time, macOS asks whether Twinkle may control Alfred.
+
+Type to search history and open tabs; what you type also works as an address or a search. When the top history match starts with what you typed (`git` → github.com) it comes first. ↩ opens in the current tab, ⌘↩ in a new tab, ⇥ puts a result's address in the box to edit. Results for open tabs switch to that tab. The `tw` keyword does the same from anywhere.
+
+How it fits together: Twinkle runs the workflow's external trigger with the current address. The workflow's script filter runs `bin/twinkle-query`, which reads `history.sqlite` and `session.json` and answers in a few milliseconds. The chosen result goes back as `twinkle://open?input=…[&tab=new]` or `twinkle://switch?tab=<id>`. Those links only open web addresses and searches; pages inside Twinkle can't use them. If Alfred isn't there, ⌘L falls back to the toolbar field.
 
 ### containers.json
 
@@ -76,7 +91,7 @@ A site covers its subdomains, and the most specific entry wins: here `mail.examp
 | | |
 |---|---|
 | `⌘T` new tab (same container) · `⌃⌘0` new tab, no container · `⌃⌘1`–`9` new tab in container · `⌥⌘T` new temporary container | `⌘W` close · `⇧⌘T` reopen closed tab |
-| `⌘L` address · `⌘F` find · `⌘G` / `⇧⌘G` next / previous | `⌘[` / `⌘]` back / forward · `⌘R` reload · `⌥⌘R` reload from origin |
+| `⌘L` address (Alfred or the toolbar field) · `⌘F` find · `⌘G` / `⇧⌘G` next / previous | `⌘[` / `⌘]` back / forward · `⌘R` reload · `⌥⌘R` reload from origin |
 | `⌃Tab` / `⌃⇧Tab`, `⇧⌘]` / `⇧⌘[` next / previous tab · `⌘1`–`⌘9` jump | `⌘+` (or `⌘=`) / `⌘-` / `⌘0` zoom, remembered per site · `⌃⌘S` tab list · `⇧⌘N` new container |
 
 ⌘-click or middle-click a link to open it in a background tab in the same container; add ⇧ to switch to it. Middle-click a tab to close it. Right-click a tab to reopen it in another container (or a new temporary one), or to unload it now. Right-click a page › Inspect Element opens Safari's Web Inspector.
@@ -96,6 +111,9 @@ Sources/Twinkle/       The macOS app (AppKit + WKWebView).
   Downloads                WKDownload to the downloads folder
   Favicons                 site icons, fetched without cookies
   JSONViewer               pretty-prints JSON responses
+  Alfred                   hands ⌘L to the Alfred workflow
+Sources/TwinkleQuery/      twinkle-query, the Alfred workflow's helper
+alfred/info.plist          the Alfred workflow
 scripts/make-icon.swift    draws the app icon (build.sh runs it)
   Debug                    inspection hook used by debug.sh
 ```

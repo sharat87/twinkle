@@ -19,8 +19,14 @@ protocol TabHost: AnyObject {
 /// display, so tabs restored from the last session cost nothing until clicked.
 @MainActor
 final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
+    /// Saved with the session, so the Alfred workflow can name this tab.
+    let id: UUID
     let containerID: UUID?
     weak var host: TabHost?
+    /// The page on screen is Twinkle's error page, not the address's.
+    private var showingErrorPage = false
+    /// The next commit is the error page being shown.
+    private var errorPageLoading = false
 
     private(set) var webView: WKWebView?
     /// Where the tab will go once its web view exists.
@@ -43,7 +49,8 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// Why the last unload check kept the tab, for debug.sh.
     private(set) var unloadCheck = ""
 
-    init(url: URL?, title: String = "", container: UUID?, host: TabHost) {
+    init(url: URL?, title: String = "", container: UUID?, host: TabHost, id: UUID = UUID()) {
+        self.id = id
         self.pendingURL = url
         self.savedTitle = title
         self.containerID = container
@@ -57,6 +64,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// WebKit requires the new view to use the configuration it hands over,
     /// which also keeps the pop-up in its opener's container.
     init(popupConfiguration: WKWebViewConfiguration, container: UUID?, host: TabHost) {
+        self.id = UUID()
         self.pendingURL = nil
         self.savedTitle = ""
         self.containerID = container
@@ -87,7 +95,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// For the session and the closed-tabs list.
     var saved: SavedTab? {
         guard let url, let scheme = url.scheme?.lowercased(), ["http", "https", "file"].contains(scheme) else { return nil }
-        return SavedTab(url: url.absoluteString, title: title, container: containerID)
+        return SavedTab(id: id, url: url.absoluteString, title: title, container: containerID)
     }
 
     // MARK: Loading
@@ -238,7 +246,13 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
             }
         }
         observations = [
-            webView.observe(\.title) { v, _ in changed(v) },
+            webView.observe(\.title) { [weak self] v, _ in
+                changed(v)
+                MainActor.assumeIsolated {
+                    guard let self, !self.showingErrorPage, let url = v.url, let title = v.title else { return }
+                    AppState.shared.recordTitle(title, for: url, container: self.containerID)
+                }
+            },
             webView.observe(\.url) { v, _ in changed(v) },
             webView.observe(\.isLoading) { v, _ in changed(v) },
             webView.observe(\.estimatedProgress) { v, _ in changed(v) },
@@ -263,6 +277,12 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
 
         // mailto:, zoommtg:, etc. go to the app that handles them.
         let scheme = url.scheme?.lowercased() ?? ""
+        // twinkle:// links drive the browser itself (the Alfred workflow);
+        // pages don't get to use them.
+        if scheme == "twinkle" {
+            decisionHandler(.cancel)
+            return
+        }
         if !Self.webSchemes.contains(scheme) {
             if action.navigationType == .linkActivated || action.targetFrame?.isMainFrame != false {
                 NSWorkspace.shared.open(url)
@@ -340,6 +360,12 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // The error page commits at the failed address: not a visit.
+        showingErrorPage = errorPageLoading
+        errorPageLoading = false
+        if !showingErrorPage, let url = webView.url {
+            AppState.shared.recordVisit(url, title: webView.title ?? "", container: containerID)
+        }
         // Each site's remembered zoom, applied as its page arrives.
         let zoom = AppState.shared.zoom(forHost: webView.url?.host())
         if abs(webView.pageZoom - zoom) > 0.001 { webView.pageZoom = zoom }
@@ -369,6 +395,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         if e.domain == NSURLErrorDomain && e.code == NSURLErrorCancelled { return }
         if e.domain == "WebKitErrorDomain" && [102, 204].contains(e.code) { return }
         let failing = (e.userInfo[NSURLErrorFailingURLErrorKey] as? URL) ?? webView.url
+        errorPageLoading = true
         webView.loadHTMLString(ErrorPage.html(error: e, url: failing), baseURL: failing)
     }
 

@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = AppState.shared
+        AppState.shared.linkQueryHelper()
         Blocker.shared.start()
         NSApp.mainMenu = MainMenu.build(app: self)
         NotificationCenter.default.addObserver(forName: .containersChanged, object: nil, queue: .main) { _ in
@@ -18,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.controller = controller
         Debug.install { [weak self] in self?.controller }
         controller.restoreSession()
-        for url in pendingURLs { controller.openTab(url: url, container: nil) }
+        for url in pendingURLs { controller.open(url) }
         pendingURLs = []
         controller.showWindow(nil)
         NSApp.activate()
@@ -29,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pendingURLs.append(contentsOf: urls)
             return
         }
-        for url in urls { controller.openTab(url: url, container: nil) }
+        for url in urls { controller.open(url) }
         controller.showWindow(nil)
     }
 
@@ -60,6 +61,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func openDataFolder(_ sender: Any?) {
         NSWorkspace.shared.open(AppState.shared.files.directory)
+    }
+
+    @objc func clearHistory(_ sender: Any?) {
+        let alert = NSAlert()
+        alert.messageText = "Clear all history?"
+        alert.informativeText = "Every page in history.sqlite is forgotten. Open tabs stay open."
+        alert.addButton(withTitle: "Clear History")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        AppState.shared.clearHistory()
+        Status.show("History cleared.")
     }
 
     @objc func openDownloads(_ sender: Any?) {

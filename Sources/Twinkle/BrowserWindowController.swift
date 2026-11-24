@@ -135,6 +135,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         table.delegate = self
         table.registerForDraggedTypes([.twinkleTab])
         table.onMiddleClick = { [weak self] row in self?.closeTab(at: row) }
+        table.onMouseDown = { [weak self] row in
+            guard let self, row != self.selected else { return }
+            self.select(row)
+        }
         table.draggingDestinationFeedbackStyle = .gap
         let menu = NSMenu()
         menu.delegate = self
@@ -706,6 +710,50 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         openTab(url: url, container: container, at: selected + 1, title: saved.title, exempt: true)
     }
 
+    /// ⌘L: Alfred, if that's the address input in settings and it
+    /// answers; otherwise the field in the toolbar.
+    @objc func openLocation(_ sender: Any?) {
+        if AppState.shared.settings.addressInput == "alfred",
+           Alfred.showAddress(current?.url?.absoluteString ?? "") {
+            return
+        }
+        focusAddress(sender)
+    }
+
+    /// A link from another app: twinkle:// links are commands (from the
+    /// Alfred workflow), anything else opens in a new tab.
+    func open(_ url: URL) {
+        if url.scheme?.lowercased() == "twinkle" { handleLink(url) } else { openTab(url: url, container: nil) }
+    }
+
+    /// twinkle://open?input=<text>[&tab=new] and twinkle://switch?tab=<id>.
+    /// Only web addresses and searches: a link can't open local files.
+    private func handleLink(_ link: URL) {
+        let items = URLComponents(url: link, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+        switch link.host()?.lowercased() {
+        case "open":
+            guard let input = value("input"),
+                  let url = Address.resolve(input, searchTemplate: AppState.shared.settings.searchURL),
+                  ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return }
+            if value("tab") == "new" || current == nil {
+                openTab(url: url, container: current?.containerID, at: selected + 1)
+            } else if let tab = current {
+                tab.load(url)
+                select(selected)
+                window?.makeFirstResponder(tab.webView)
+            }
+        case "switch":
+            if let id = value("tab").flatMap(UUID.init(uuidString:)), let i = tabs.firstIndex(where: { $0.id == id }) {
+                select(i)
+            }
+        default:
+            return
+        }
+        showWindow(nil)
+        NSApp.activate()
+    }
+
     @objc func focusAddress(_ sender: Any?) {
         window?.makeFirstResponder(addressField)
         addressField.currentEditor()?.selectAll(nil)
@@ -897,7 +945,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         let session = (try? AppState.shared.files.load(Session.self, from: AppState.sessionFile)) ?? nil
         for saved in session?.tabs ?? [] {
             guard let url = URL(string: saved.url) else { continue }
-            let tab = Tab(url: url, title: saved.title, container: saved.container, host: self)
+            let tab = Tab(url: url, title: saved.title, container: saved.container, host: self, id: saved.id)
             // Restored where you left it, even if the site is assigned elsewhere.
             if let assignment = AppState.shared.assignment(forHost: url.host()), assignment.container.id != saved.container {
                 tab.exemptSite = assignment.site
@@ -1071,6 +1119,15 @@ enum ContainerMenus {
 /// The tab list: a middle click on a tab closes it.
 final class TabTableView: NSTableView {
     var onMiddleClick: ((Int) -> Void)?
+    var onMouseDown: ((Int) -> Void)?
+
+    /// Tabs switch the moment the button goes down, not when it comes up
+    /// (a table that allows dragging normally waits for mouse-up).
+    override func mouseDown(with event: NSEvent) {
+        let row = self.row(at: convert(event.locationInWindow, from: nil))
+        if row >= 0, !event.modifierFlags.contains(.control) { onMouseDown?(row) }
+        super.mouseDown(with: event)
+    }
 
     override func otherMouseUp(with event: NSEvent) {
         guard event.buttonNumber == 2 else { return super.otherMouseUp(with: event) }

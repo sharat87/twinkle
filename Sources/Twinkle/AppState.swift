@@ -159,6 +159,55 @@ final class AppState {
         return store
     }
 
+    // MARK: History
+
+    static let historyFile = "history.sqlite"
+
+    /// Opened on first use; nil when history is off (historyDays 0).
+    private lazy var history: History? = {
+        guard settings.historyDays > 0 else { return nil }
+        do {
+            let history = try History(path: files.url(Self.historyFile).path)
+            try? history.forget(before: Date().addingTimeInterval(-settings.historyDays * 86_400))
+            return history
+        } catch {
+            Status.show("History is unavailable: \(error)", sticky: true)
+            return nil
+        }
+    }()
+
+    /// Web pages only, and nothing from temporary containers.
+    private func recordable(_ url: URL, _ container: UUID?) -> Bool {
+        settings.historyDays > 0 && ["http", "https"].contains(url.scheme?.lowercased() ?? "") && !isTemporary(container)
+    }
+
+    func recordVisit(_ url: URL, title: String, container: UUID?) {
+        guard recordable(url, container) else { return }
+        try? history?.recordVisit(url: url.absoluteString, title: title)
+    }
+
+    func recordTitle(_ title: String, for url: URL, container: UUID?) {
+        guard recordable(url, container) else { return }
+        try? history?.setTitle(title, for: url.absoluteString)
+    }
+
+    func clearHistory() {
+        try? history?.forgetAll()
+    }
+
+    /// The Alfred workflow runs `bin/twinkle-query` in Twinkle's folder: a
+    /// link to the helper inside whichever copy of the app is running.
+    func linkQueryHelper() {
+        let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/twinkle-query")
+        guard FileManager.default.isExecutableFile(atPath: helper.path) else { return }
+        let bin = files.directory.appendingPathComponent("bin", isDirectory: true)
+        let link = bin.appendingPathComponent("twinkle-query")
+        if (try? FileManager.default.destinationOfSymbolicLink(atPath: link.path)) == helper.path { return }
+        try? FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: link)
+        try? FileManager.default.createSymbolicLink(at: link, withDestinationURL: helper)
+    }
+
     // MARK: Zoom
 
     private var zoomLevelsCache: ZoomLevels?
