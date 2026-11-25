@@ -17,6 +17,20 @@ public enum Address {
         return URL(string: template.replacingOccurrences(of: "%s", with: encoded))
     }
 
+    /// Whether two addresses are the same page, for reusing an open tab:
+    /// scheme and host ignore case, and `https://a.com` is `https://a.com/`.
+    public static func samePage(_ a: URL, _ b: URL) -> Bool {
+        key(a) == key(b)
+    }
+
+    static func key(_ url: URL) -> String {
+        guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url.absoluteString }
+        parts.scheme = parts.scheme?.lowercased()
+        parts.host = parts.host?.lowercased()
+        if parts.host != nil, parts.path.isEmpty { parts.path = "/" }
+        return parts.string ?? url.absoluteString
+    }
+
     public static func asURL(_ input: String) -> URL? {
         let lower = input.lowercased()
         for prefix in ["about:", "data:", "file:"] where lower.hasPrefix(prefix) {

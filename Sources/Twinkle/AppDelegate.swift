@@ -1,4 +1,5 @@
 import AppKit
+import TwinkleCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -52,6 +53,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func openContainers(_ sender: Any?) {
         edit(AppState.shared.files.url(AppState.containersFile))
+    }
+
+    @objc func openBookmarks(_ sender: Any?) {
+        let files = AppState.shared.files
+        if files.modificationDate(Bookmark.file) == nil {
+            try? files.save([Bookmark](), to: Bookmark.file)
+        }
+        edit(files.url(Bookmark.file))
     }
 
     @objc func openCustomFilters(_ sender: Any?) {

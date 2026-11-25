@@ -232,6 +232,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         }
         Blocker.shared.register(config.userContentController)
         JSONViewer.install(config.userContentController)
+        PageStyle.install(config.userContentController)
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self

@@ -73,7 +73,7 @@ public enum Safari {
 
     // MARK: Bookmarks
 
-    /// Bookmarks in order, each with the folders it's in.
+    /// Bookmarks in order, folders flattened away.
     public static func bookmarks(from file: URL = bookmarksFile) throws -> [Bookmark] {
         guard let data = try? Data(contentsOf: file) else { throw Failure.unreadable(file.path) }
         return try bookmarks(plist: data)
@@ -84,31 +84,21 @@ public enum Safari {
             throw Failure.format("Safari's Bookmarks.plist isn't laid out as expected")
         }
         var found: [Bookmark] = []
-        func walk(_ node: [String: Any], _ path: [String]) {
+        func walk(_ node: [String: Any]) {
             switch node["WebBookmarkType"] as? String {
             case "WebBookmarkTypeLeaf":
                 guard let url = node["URLString"] as? String, url.hasPrefix("http://") || url.hasPrefix("https://") else { return }
                 let title = (node["URIDictionary"] as? [String: Any])?["title"] as? String ?? ""
-                found.append(Bookmark(title: title, url: url, folder: path.joined(separator: " › ")))
+                found.append(Bookmark(title: title, url: url))
             case "WebBookmarkTypeList":
-                var path = path
-                if let title = node["Title"] as? String, !title.isEmpty {
-                    path.append(folderNames[title] ?? title)
-                }
-                for child in node["Children"] as? [[String: Any]] ?? [] { walk(child, path) }
+                for child in node["Children"] as? [[String: Any]] ?? [] { walk(child) }
             default:
                 return   // the History proxy and the like
             }
         }
-        walk(root, [])
+        walk(root)
         return found
     }
-
-    static let folderNames = [
-        "BookmarksBar": "Favourites",
-        "BookmarksMenu": "Bookmarks Menu",
-        "com.apple.ReadingList": "Reading List",
-    ]
 
     // MARK: Cookies
 
@@ -182,18 +172,15 @@ public enum Safari {
     }
 }
 
-/// A bookmark: Twinkle has no bookmarks bar, but bookmarks.json is
-/// searched by the address bar, above plain history.
+/// A bookmark: bookmarks.json is one flat list, searched by the address
+/// bar above plain history.
 public struct Bookmark: Codable, Equatable, Sendable {
     public var title: String
     public var url: String
-    /// "Favourites › Work", or "" at the top level.
-    public var folder: String
 
-    public init(title: String, url: String, folder: String) {
+    public init(title: String, url: String) {
         self.title = title
         self.url = url
-        self.folder = folder
     }
 
     public static let file = "bookmarks.json"

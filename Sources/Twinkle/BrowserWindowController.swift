@@ -543,9 +543,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     @objc private func duplicateRow(_ sender: NSMenuItem) {
-        guard tabs.indices.contains(sender.tag) else { return }
-        let tab = tabs[sender.tag]
-        openTab(url: tab.url, container: tab.containerID, at: sender.tag + 1, title: tab.title, exempt: true)
+        duplicateTab(at: sender.tag)
+    }
+
+    private func duplicateTab(at row: Int) {
+        guard tabs.indices.contains(row) else { return }
+        let tab = tabs[row]
+        openTab(url: tab.url, container: tab.containerID, at: row + 1, title: tab.title, exempt: true)
     }
 
     @objc private func copyRowAddress(_ sender: NSMenuItem) {
@@ -768,6 +772,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
     }
 
+    @objc func duplicateCurrentTab(_ sender: Any?) {
+        duplicateTab(at: selected)
+    }
+
     @objc func closeCurrentTab(_ sender: Any?) {
         closeTab(at: selected)
     }
@@ -782,9 +790,17 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         openTab(url: url, container: container, at: selected + 1, title: saved.title, exempt: true)
     }
 
-    /// A link from another app opens in a new tab.
+    /// A link from another app switches to a tab already showing it, like
+    /// Safari, the current tab first; otherwise it opens in a new tab.
     func open(_ url: URL) {
-        openTab(url: url, container: nil)
+        let match = { (tab: Tab) in tab.url.map { Address.samePage($0, url) } ?? false }
+        if let tab = current, match(tab) {
+            select(selected)
+        } else if let i = tabs.firstIndex(where: match) {
+            select(i)
+        } else {
+            openTab(url: url, container: nil)
+        }
     }
 
     @objc func focusAddress(_ sender: Any?) {
@@ -864,6 +880,17 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.absoluteString, forType: .string)
         Status.show("Copied \(url.absoluteString)")
+    }
+
+    @objc func bookmarkPage(_ sender: Any?) {
+        guard let tab = current, let url = tab.url, !tab.isBlank else { return }
+        let title = tab.title.isEmpty ? (url.host() ?? url.absoluteString) : tab.title
+        do {
+            let added = try AppState.shared.addBookmarks([Bookmark(title: title, url: url.absoluteString)])
+            Status.show(added > 0 ? "Bookmarked \(title)" : "Already bookmarked")
+        } catch {
+            Status.show("Couldn't save bookmark: \(error.localizedDescription)")
+        }
     }
 
     @objc func toggleBlockingForSite(_ sender: Any?) {

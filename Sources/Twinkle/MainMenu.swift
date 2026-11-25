@@ -35,6 +35,7 @@ enum MainMenu {
             item("New Container…", #selector(BrowserWindowController.newContainer(_:)), "n", [.command, .shift]),
             item("Open Location…", #selector(BrowserWindowController.focusAddress(_:)), "l"),
             .separator(),
+            item("Duplicate Tab", #selector(BrowserWindowController.duplicateCurrentTab(_:)), "d", [.command, .shift]),
             item("Reopen Closed Tab", #selector(BrowserWindowController.reopenClosedTab(_:)), "t", [.command, .shift]),
             item("Close Tab", #selector(BrowserWindowController.closeCurrentTab(_:)), "w"),
             item("Close Window", #selector(NSWindow.performClose(_:)), "w", [.command, .shift]),
@@ -76,6 +77,9 @@ enum MainMenu {
         main.addItem(submenu("History", [
             item("Back", #selector(BrowserWindowController.goBack(_:)), "["),
             item("Forward", #selector(BrowserWindowController.goForward(_:)), "]"),
+            .separator(),
+            item("Bookmark This Page", #selector(BrowserWindowController.bookmarkPage(_:)), "d"),
+            item("Edit Bookmarks…", #selector(AppDelegate.openBookmarks(_:)), target: app),
             .separator(),
             item("Clear History…", #selector(AppDelegate.clearHistory(_:)), target: app),
         ]))

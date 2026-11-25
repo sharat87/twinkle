@@ -201,9 +201,8 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
                                 detail: Self.display(entry.url), url: url))
             case .bookmark(let entry):
                 guard shown.insert(HistoryIndex.bare(entry.url)).inserted, let url = URL(string: entry.url) else { continue }
-                let folder = AppState.shared.bookmarkFolders[entry.url] ?? ""
                 rows.append(Row(kind: .page, title: entry.title.isEmpty ? Self.display(entry.url) : entry.title,
-                                detail: "★ " + (folder.isEmpty ? "" : folder + " · ") + Self.display(entry.url), url: url))
+                                detail: "★ " + Self.display(entry.url), url: url))
             }
         }
         self.rows = rows
@@ -229,10 +228,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         let known = bookmark ?? keys.lazy.compactMap { index.entry(for: $0) }.first
         let title = known.map(\.title).flatMap { $0.isEmpty ? nil : $0 } ?? Self.display(url.absoluteString)
         var detail = Self.display(url.absoluteString)
-        if let bookmark {
-            let folder = AppState.shared.bookmarkFolders[bookmark.url] ?? ""
-            detail = "★ " + (folder.isEmpty ? "" : folder + " · ") + detail
-        }
+        if bookmark != nil { detail = "★ " + detail }
         return Row(kind: .typed, title: title, detail: detail, url: url)
     }
 

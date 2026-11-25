@@ -32,6 +32,16 @@ let ddg = "https://duckduckgo.com/?q=%s"
         let url = Address.resolve("a&b c", searchTemplate: ddg)
         #expect(url?.absoluteString == "https://duckduckgo.com/?q=a%26b%20c")
     }
+
+    @Test func samePage() {
+        let u = { (s: String) in URL(string: s)! }
+        #expect(Address.samePage(u("https://example.com"), u("https://example.com/")))
+        #expect(Address.samePage(u("HTTPS://Example.com/a?b=1"), u("https://example.com/a?b=1")))
+        #expect(!Address.samePage(u("https://example.com/a"), u("https://example.com/A")))
+        #expect(!Address.samePage(u("https://example.com/"), u("http://example.com/")))
+        #expect(!Address.samePage(u("https://example.com/#x"), u("https://example.com/")))
+        #expect(!Address.samePage(u("https://example.com/?a=1"), u("https://example.com/")))
+    }
 }
 
 @Suite struct WindowTitleTests {
@@ -412,9 +422,9 @@ let ddg = "https://duckduckgo.com/?q=%s"
             ]]
         let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0)
         #expect(try Safari.bookmarks(plist: data) == [
-            Bookmark(title: "GitHub", url: "https://github.com/", folder: "Favourites"),
-            Bookmark(title: "Linear", url: "https://linear.app/", folder: "Favourites › Work"),
-            Bookmark(title: "A post", url: "https://example.com/post", folder: "Reading List"),
+            Bookmark(title: "GitHub", url: "https://github.com/"),
+            Bookmark(title: "Linear", url: "https://linear.app/"),
+            Bookmark(title: "A post", url: "https://example.com/post"),
         ])
     }
 

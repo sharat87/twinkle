@@ -220,7 +220,6 @@ final class AppState {
     /// bookmarks.json, searched by the address bar. Read again when it
     /// changes on disk, like the other files.
     private(set) var bookmarks: [Bookmark] = []
-    private(set) var bookmarkFolders: [String: String] = [:]
     private var bookmarksDate: Date?
     private var bookmarkIndexCache: HistoryIndex?
 
@@ -229,7 +228,6 @@ final class AppState {
         guard date != bookmarksDate else { return }
         bookmarksDate = date
         bookmarks = (try? files.load([Bookmark].self, from: Bookmark.file)) ?? []
-        bookmarkFolders = Dictionary(bookmarks.map { ($0.url, $0.folder) }, uniquingKeysWith: { a, _ in a })
         bookmarkIndexCache = nil
     }
 
