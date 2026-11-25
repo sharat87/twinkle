@@ -10,42 +10,18 @@
 //   twinkle://open?input=<text>&tab=new    in a new tab (⌘↩)
 //   twinkle://switch?tab=<id>              bring an open tab to the front
 //
-// With TWINKLE_SELECT_ALL=1 it instead waits for Alfred's window and presses
-// ⌘A, so the address Alfred opens with is selected. Alfred runs it, so the key
-// press uses Alfred's Accessibility access, not Twinkle's.
-import CoreGraphics
+// With nothing typed (⌘L opens it that way) the page in front comes first,
+// so ⇥ puts its address in the box to edit, then recent history.
 import CryptoKit
 import Foundation
 import TwinkleCore
-
-if ProcessInfo.processInfo.environment["TWINKLE_SELECT_ALL"] == "1" {
-    selectAllInAlfred()
-    exit(0)
-}
-
-func selectAllInAlfred() {
-    // Up to a second for the window to appear: owner and bounds need no
-    // permission, unlike window titles.
-    func alfredShowing() -> Bool {
-        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
-        return windows.contains { ($0[kCGWindowOwnerName as String] as? String)?.hasPrefix("Alfred") == true
-            && ($0[kCGWindowLayer as String] as? Int ?? 0) > 0 }
-    }
-    for _ in 0..<50 where !alfredShowing() { usleep(20_000) }
-    usleep(30_000)
-    let source = CGEventSource(stateID: .hidSystemState)
-    for down in [true, false] {
-        let key = CGEvent(keyboardEventSource: source, virtualKey: 0x00, keyDown: down)   // A
-        key?.flags = .maskCommand
-        key?.post(tap: .cghidEventTap)
-    }
-}
 
 let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     .appendingPathComponent("Twinkle", isDirectory: true)
 let files = try? FileStore(directory: support)
 let settings = (try? files?.load(Settings.self, from: "settings.json")) ?? Settings()
 let session = (try? files?.load(Session.self, from: "session.json")) ?? Session(tabs: [], selected: 0)
+let current = (try? files?.load(CurrentPage.self, from: CurrentPage.file)) ?? nil
 
 let text = CommandLine.arguments.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespaces)
 let words = HistoryRanking.words(text)
@@ -100,10 +76,18 @@ if !text.isEmpty, let target = Address.resolve(text, searchTemplate: settings.se
     shown.insert(target.absoluteString)
 }
 
-// Open tabs.
+// With nothing typed, the page in front.
+if text.isEmpty, let current, !current.url.isEmpty {
+    var item = page(current.url, title: current.title, subtitle: "This page · ⇥ to edit · \(current.url)")
+    item["mods"] = nil
+    items.append(item)
+    shown.insert(current.url)
+}
+
+// Open tabs, apart from the one in front.
 // Ranked like history, so github.com comes before a deep GitHub link.
 let now = Date()
-let tabs = words.isEmpty ? [] : session.tabs
+let tabs = words.isEmpty ? [] : session.tabs.filter { $0.id != current?.tab }
     .map { ($0, HistoryRanking.score(HistoryEntry(url: $0.url, title: $0.title, visits: 1, lastVisit: now), words: words, now: now)) }
     .filter { $0.1 > 0 }
     .sorted { $0.1 > $1.1 }

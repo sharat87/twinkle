@@ -36,6 +36,7 @@ Everything lives in `~/Library/Application Support/Twinkle/`:
 | `filters/cache/` | Downloaded filter lists. |
 | `zoom.json` | Zoom level per site, like `{"example.com": 1.25}`. Covers subdomains. |
 | `history.sqlite` | Pages visited (address, title, visits, last visit), kept `historyDays`. Not written for temporary containers. History › Clear History empties it. |
+| `current.json` | The page in front, for the Alfred helper. |
 | `bin/twinkle-query` | Link to the Alfred helper in the running copy of the app. |
 | `favicons/` | Site icons for the tab list, one small PNG per host. Not written for temporary containers. |
 
@@ -66,12 +67,11 @@ The Twinkle menu opens each of these. WebKit keeps each container's site data un
 ### Alfred as the address bar
 
 1. `./build.sh` also builds `build/Twinkle Address.alfredworkflow`; double-click it to install it in Alfred.
-2. Set `"addressInput": "alfred"` in settings.json.
-3. ⌘L in Twinkle now opens Alfred with the current address. The first time, macOS asks whether Twinkle may control Alfred.
+2. The workflow's hotkey is ⌘L, active only while Twinkle is in front, so Alfred takes ⌘L before Twinkle sees it. If Alfred asks you to set the hotkey on import, set it to ⌘L. Without the hotkey, `"addressInput": "alfred"` in settings.json makes Twinkle's own ⌘L call the workflow instead, which is slower and needs macOS's permission for Twinkle to control Alfred.
 
-Type to search history and open tabs; what you type also works as an address or a search. When the top history match starts with what you typed (`git` → github.com) it comes first. ↩ opens in the current tab, ⌘↩ in a new tab, ⇥ puts a result's address in the box to edit. Results for open tabs switch to that tab. The `tw` keyword does the same from anywhere.
+Alfred opens with nothing typed and the current page as the first result, so typing replaces the address, as in any browser, and ⇥ puts it in the box to edit. Type to search history and open tabs; what you type also works as an address or a search. When the top history match starts with what you typed (`git` → github.com) it comes first. ↩ opens in the current tab, ⌘↩ in a new tab, ⇥ puts a result's address in the box to edit. Results for open tabs switch to that tab. The `tw` keyword does the same from anywhere.
 
-How it fits together: Twinkle runs the workflow's external trigger with the current address. The workflow's script filter runs `bin/twinkle-query`, which reads `history.sqlite` and `session.json` and answers in a few milliseconds. The chosen result goes back as `twinkle://open?input=…[&tab=new]` or `twinkle://switch?tab=<id>`. Those links only open web addresses and searches; pages inside Twinkle can't use them. If Alfred isn't there, ⌘L falls back to the toolbar field.
+How it fits together: Twinkle keeps the page in front in `current.json` (left empty for temporary containers). The workflow's script filter runs `bin/twinkle-query`, which reads that, `history.sqlite` and `session.json` and answers in a few milliseconds. The chosen result goes back as `twinkle://open?input=…[&tab=new]` or `twinkle://switch?tab=<id>`. Those links only open web addresses and searches; pages inside Twinkle can't use them. If Alfred isn't there, ⌘L falls back to the toolbar field.
 
 ### containers.json
 

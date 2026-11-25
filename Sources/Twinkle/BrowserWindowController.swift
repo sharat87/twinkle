@@ -423,6 +423,19 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
         window?.title = WindowTitle.make(title: tab.pageTitle, url: tab.url,
                                          format: AppState.shared.settings.windowTitleFormat)
+        writeCurrentPage(tab)
+    }
+
+    private var writtenCurrent: CurrentPage?
+
+    /// For the Alfred workflow, which opens on ⌘L with the current page first.
+    private func writeCurrentPage(_ tab: Tab) {
+        let page = AppState.shared.isTemporary(tab.containerID)
+            ? CurrentPage(url: "", title: "", tab: nil)
+            : CurrentPage(url: tab.url?.absoluteString ?? "", title: tab.pageTitle, tab: tab.id)
+        guard page != writtenCurrent else { return }
+        writtenCurrent = page
+        try? AppState.shared.files.save(page, to: CurrentPage.file)
     }
 
     // MARK: TabHost

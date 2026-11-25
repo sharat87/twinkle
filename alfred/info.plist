@@ -3,182 +3,21 @@
 <!--
   Twinkle Address: Alfred as Twinkle's address bar.
 
-  Twinkle's ⌘L runs the "address" external trigger with the current address.
-  That runs a script which shows the script filter (through the "query"
-  trigger) with the address in the box, then has twinkle-query press ⌘A so
-  the address is selected: Alfred has no setting for that.
-  The script filter asks twinkle-query (a link Twinkle keeps in its
-  Application Support folder) for history and open tabs; the choice goes back
-  to Twinkle as a twinkle:// link. ↩ opens in the current tab, ⌘↩ in a new one.
-  The "tw" keyword works from anywhere too.
+  ⌘L, only while Twinkle is in front, shows the script filter with nothing
+  typed; twinkle-query (a link Twinkle keeps in its Application Support
+  folder) lists the current page first, so typing replaces it and ⇥ puts it
+  in the box to edit. Results come from history and open tabs; the choice
+  goes back to Twinkle as a twinkle:// link. ↩ opens in the current tab, ⌘↩
+  in a new one. The "address" external trigger (Twinkle's own ⌘L, if the
+  hotkey is unset) and the "tw" keyword lead to the same place.
 -->
 <plist version="1.0">
 <dict>
 	<key>bundleid</key>
 	<string>dev.twinkle.address</string>
-	<key>name</key>
-	<string>Twinkle Address</string>
-	<key>description</key>
-	<string>Twinkle's address bar: history, open tabs, addresses and searches</string>
-	<key>createdby</key>
-	<string>Twinkle</string>
-	<key>webaddress</key>
-	<string></string>
-	<key>disabled</key>
-	<false/>
-	<key>userconfigurationconfig</key>
-	<array/>
-	<key>readme</key>
-	<string>Set "addressInput": "alfred" in Twinkle's settings.json; then ⌘L in Twinkle opens this. Type to search history and open tabs. ↩ opens in the current tab, ⌘↩ in a new tab, ⇥ puts a result's address in the box to edit.</string>
-	<key>objects</key>
-	<array>
-		<dict>
-			<key>type</key>
-			<string>alfred.workflow.trigger.external</string>
-			<key>uid</key>
-			<string>7A1C0E2B-0000-4000-8000-000000000001</string>
-			<key>version</key>
-			<integer>1</integer>
-			<key>config</key>
-			<dict>
-				<key>triggerid</key>
-				<string>address</string>
-				<key>availableviaurlhandler</key>
-				<false/>
-			</dict>
-		</dict>
-		<dict>
-			<key>type</key>
-			<string>alfred.workflow.input.scriptfilter</string>
-			<key>uid</key>
-			<string>7A1C0E2B-0000-4000-8000-000000000002</string>
-			<key>version</key>
-			<integer>3</integer>
-			<key>config</key>
-			<dict>
-				<key>keyword</key>
-				<string>tw</string>
-				<key>withspace</key>
-				<true/>
-				<key>title</key>
-				<string>Twinkle</string>
-				<key>subtext</key>
-				<string>History, open tabs, addresses and searches</string>
-				<key>runningsubtext</key>
-				<string></string>
-				<key>argumenttype</key>
-				<integer>1</integer>
-				<key>argumenttrimmode</key>
-				<integer>0</integer>
-				<key>argumenttreatemptyqueryasnil</key>
-				<false/>
-				<key>alfredfiltersresults</key>
-				<false/>
-				<key>alfredfiltersresultsmatchmode</key>
-				<integer>0</integer>
-				<key>queuemode</key>
-				<integer>2</integer>
-				<key>queuedelaymode</key>
-				<integer>0</integer>
-				<key>queuedelaycustom</key>
-				<integer>1</integer>
-				<key>queuedelayimmediatelyinitially</key>
-				<true/>
-				<key>escaping</key>
-				<integer>0</integer>
-				<key>scriptargtype</key>
-				<integer>1</integer>
-				<key>type</key>
-				<integer>0</integer>
-				<key>scriptfile</key>
-				<string></string>
-				<key>script</key>
-				<string>q="$HOME/Library/Application Support/Twinkle/bin/twinkle-query"
-[ -x "$q" ] &amp;&amp; exec "$q" "$1"
-echo '{"items":[{"title":"Open Twinkle once first","subtitle":"Twinkle sets up the link this workflow uses when it starts","valid":false}]}'</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>type</key>
-			<string>alfred.workflow.action.script</string>
-			<key>uid</key>
-			<string>7A1C0E2B-0000-4000-8000-000000000003</string>
-			<key>version</key>
-			<integer>2</integer>
-			<key>config</key>
-			<dict>
-				<key>concurrently</key>
-				<false/>
-				<key>escaping</key>
-				<integer>0</integer>
-				<key>scriptargtype</key>
-				<integer>1</integer>
-				<key>scriptfile</key>
-				<string></string>
-				<key>type</key>
-				<integer>0</integer>
-				<key>script</key>
-				<string>/usr/bin/open "$1"</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>type</key>
-			<string>alfred.workflow.action.script</string>
-			<key>uid</key>
-			<string>7A1C0E2B-0000-4000-8000-000000000004</string>
-			<key>version</key>
-			<integer>2</integer>
-			<key>config</key>
-			<dict>
-				<key>concurrently</key>
-				<true/>
-				<key>escaping</key>
-				<integer>0</integer>
-				<key>scriptargtype</key>
-				<integer>1</integer>
-				<key>scriptfile</key>
-				<string></string>
-				<key>type</key>
-				<integer>0</integer>
-				<key>script</key>
-				<string>/usr/bin/osascript -e 'on run argv' -e 'tell application id "com.runningwithcrayons.Alfred" to run trigger "query" in workflow "dev.twinkle.address" with argument (item 1 of argv)' -e 'end run' "$1"
-q="$HOME/Library/Application Support/Twinkle/bin/twinkle-query"
-[ -n "$1" ] &amp;&amp; [ -x "$q" ] &amp;&amp; TWINKLE_SELECT_ALL=1 "$q"
-exit 0</string>
-			</dict>
-		</dict>
-		<dict>
-			<key>type</key>
-			<string>alfred.workflow.trigger.external</string>
-			<key>uid</key>
-			<string>7A1C0E2B-0000-4000-8000-000000000005</string>
-			<key>version</key>
-			<integer>1</integer>
-			<key>config</key>
-			<dict>
-				<key>triggerid</key>
-				<string>query</string>
-				<key>availableviaurlhandler</key>
-				<false/>
-			</dict>
-		</dict>
-	</array>
 	<key>connections</key>
 	<dict>
 		<key>7A1C0E2B-0000-4000-8000-000000000001</key>
-		<array>
-			<dict>
-				<key>destinationuid</key>
-				<string>7A1C0E2B-0000-4000-8000-000000000004</string>
-				<key>modifiers</key>
-				<integer>0</integer>
-				<key>modifiersubtext</key>
-				<string></string>
-				<key>vitoclose</key>
-				<false/>
-			</dict>
-		</array>
-		<key>7A1C0E2B-0000-4000-8000-000000000005</key>
 		<array>
 			<dict>
 				<key>destinationuid</key>
@@ -214,19 +53,191 @@ exit 0</string>
 				<false/>
 			</dict>
 		</array>
+		<key>7A1C0E2B-0000-4000-8000-000000000006</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>7A1C0E2B-0000-4000-8000-000000000002</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
 	</dict>
+	<key>createdby</key>
+	<string>Twinkle</string>
+	<key>description</key>
+	<string>Twinkle's address bar: history, open tabs, addresses and searches</string>
+	<key>disabled</key>
+	<false/>
+	<key>name</key>
+	<string>Twinkle Address</string>
+	<key>objects</key>
+	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>action</key>
+				<integer>0</integer>
+				<key>argument</key>
+				<integer>0</integer>
+				<key>focusedappvariable</key>
+				<false/>
+				<key>focusedappvariablename</key>
+				<string></string>
+				<key>hotkey</key>
+				<integer>37</integer>
+				<key>hotmod</key>
+				<integer>1048576</integer>
+				<key>hotstring</key>
+				<string>L</string>
+				<key>leftcursor</key>
+				<false/>
+				<key>modsmode</key>
+				<integer>0</integer>
+				<key>relatedApps</key>
+				<array>
+					<string>dev.twinkle.Twinkle</string>
+				</array>
+				<key>relatedAppsMode</key>
+				<integer>1</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.trigger.hotkey</string>
+			<key>uid</key>
+			<string>7A1C0E2B-0000-4000-8000-000000000006</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>availableviaurlhandler</key>
+				<false/>
+				<key>triggerid</key>
+				<string>address</string>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.trigger.external</string>
+			<key>uid</key>
+			<string>7A1C0E2B-0000-4000-8000-000000000001</string>
+			<key>version</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>alfredfiltersresults</key>
+				<false/>
+				<key>alfredfiltersresultsmatchmode</key>
+				<integer>0</integer>
+				<key>argumenttreatemptyqueryasnil</key>
+				<false/>
+				<key>argumenttrimmode</key>
+				<integer>0</integer>
+				<key>argumenttype</key>
+				<integer>1</integer>
+				<key>escaping</key>
+				<integer>0</integer>
+				<key>keyword</key>
+				<string>tw</string>
+				<key>queuedelaycustom</key>
+				<integer>1</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<true/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>2</integer>
+				<key>runningsubtext</key>
+				<string></string>
+				<key>script</key>
+				<string>q="$HOME/Library/Application Support/Twinkle/bin/twinkle-query"
+[ -x "$q" ] &amp;&amp; exec "$q" "$1"
+echo '{"items":[{"title":"Open Twinkle once first","subtitle":"Twinkle sets up the link this workflow uses when it starts","valid":false}]}'</string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>subtext</key>
+				<string>History, open tabs, addresses and searches</string>
+				<key>title</key>
+				<string>Twinkle</string>
+				<key>type</key>
+				<integer>0</integer>
+				<key>withspace</key>
+				<true/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.scriptfilter</string>
+			<key>uid</key>
+			<string>7A1C0E2B-0000-4000-8000-000000000002</string>
+			<key>version</key>
+			<integer>3</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>0</integer>
+				<key>script</key>
+				<string>/usr/bin/open "$1"</string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>type</key>
+				<integer>0</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>7A1C0E2B-0000-4000-8000-000000000003</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+	</array>
+	<key>readme</key>
+	<string>Opens on ⌘L while Twinkle is in front, with the current page first: type to search history and open tabs, or ⇥ to edit the current address. ↩ opens in the current tab, ⌘↩ in a new tab. The "tw" keyword works from anywhere.</string>
 	<key>uidata</key>
 	<dict>
 		<key>7A1C0E2B-0000-4000-8000-000000000001</key>
-		<dict><key>xpos</key><real>40</real><key>ypos</key><real>40</real></dict>
+		<dict>
+			<key>xpos</key>
+			<real>40.0</real>
+			<key>ypos</key>
+			<real>40.0</real>
+		</dict>
 		<key>7A1C0E2B-0000-4000-8000-000000000002</key>
-		<dict><key>xpos</key><real>240</real><key>ypos</key><real>40</real></dict>
+		<dict>
+			<key>xpos</key>
+			<real>240.0</real>
+			<key>ypos</key>
+			<real>40.0</real>
+		</dict>
 		<key>7A1C0E2B-0000-4000-8000-000000000003</key>
-		<dict><key>xpos</key><real>440</real><key>ypos</key><real>40</real></dict>
-		<key>7A1C0E2B-0000-4000-8000-000000000004</key>
-		<dict><key>xpos</key><real>40</real><key>ypos</key><real>200</real></dict>
-		<key>7A1C0E2B-0000-4000-8000-000000000005</key>
-		<dict><key>xpos</key><real>40</real><key>ypos</key><real>340</real></dict>
+		<dict>
+			<key>xpos</key>
+			<real>440.0</real>
+			<key>ypos</key>
+			<real>40.0</real>
+		</dict>
+		<key>7A1C0E2B-0000-4000-8000-000000000006</key>
+		<dict>
+			<key>xpos</key>
+			<real>40.0</real>
+			<key>ypos</key>
+			<real>180.0</real>
+		</dict>
 	</dict>
+	<key>userconfigurationconfig</key>
+	<array/>
+	<key>webaddress</key>
+	<string></string>
 </dict>
 </plist>
