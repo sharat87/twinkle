@@ -203,6 +203,62 @@ final class AppState {
         historyIndex.setTitle(title, for: url.absoluteString)
     }
 
+    /// Pages from another browser, merged in; the in-memory index is
+    /// rebuilt. Pages older than `historyDays` are left out.
+    func importHistory(_ pages: [HistoryEntry]) throws -> Int {
+        guard let history else { return 0 }
+        let cutoff = Date().addingTimeInterval(-settings.historyDays * 86_400)
+        let recent = pages.filter { $0.lastVisit >= cutoff }
+        try history.importPages(recent)
+        historyIndex = HistoryIndex((try? history.all()) ?? [])
+        bookmarkIndexCache = nil
+        return recent.count
+    }
+
+    // MARK: Bookmarks
+
+    /// bookmarks.json, searched by the address bar. Read again when it
+    /// changes on disk, like the other files.
+    private(set) var bookmarks: [Bookmark] = []
+    private(set) var bookmarkFolders: [String: String] = [:]
+    private var bookmarksDate: Date?
+    private var bookmarkIndexCache: HistoryIndex?
+
+    private func loadBookmarks() {
+        let date = files.modificationDate(Bookmark.file)
+        guard date != bookmarksDate else { return }
+        bookmarksDate = date
+        bookmarks = (try? files.load([Bookmark].self, from: Bookmark.file)) ?? []
+        bookmarkFolders = Dictionary(bookmarks.map { ($0.url, $0.folder) }, uniquingKeysWith: { a, _ in a })
+        bookmarkIndexCache = nil
+    }
+
+    /// Bookmarks as an index, with visits from history where there are any.
+    var bookmarkIndex: HistoryIndex {
+        loadBookmarks()
+        if let index = bookmarkIndexCache { return index }
+        let history = suggestionIndex
+        let index = HistoryIndex(bookmarks.map { b in
+            history.entry(for: b.url).map { HistoryEntry(url: b.url, title: b.title.isEmpty ? $0.title : b.title,
+                                                         visits: $0.visits, lastVisit: $0.lastVisit) }
+                ?? HistoryEntry(url: b.url, title: b.title, visits: 0, lastVisit: .distantPast)
+        })
+        bookmarkIndexCache = index
+        return index
+    }
+
+    /// Adds bookmarks not already there; returns how many were new.
+    func addBookmarks(_ new: [Bookmark]) throws -> Int {
+        loadBookmarks()
+        var known = Set(bookmarks.map(\.url))
+        let added = new.filter { known.insert($0.url).inserted }
+        guard !added.isEmpty else { return 0 }
+        try files.save(bookmarks + added, to: Bookmark.file)
+        bookmarksDate = nil
+        loadBookmarks()
+        return added.count
+    }
+
     func clearHistory() {
         try? history?.forgetAll()
         historyIndex.removeAll()

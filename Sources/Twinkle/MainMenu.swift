@@ -38,6 +38,8 @@ enum MainMenu {
             item("Reopen Closed Tab", #selector(BrowserWindowController.reopenClosedTab(_:)), "t", [.command, .shift]),
             item("Close Tab", #selector(BrowserWindowController.closeCurrentTab(_:)), "w"),
             item("Close Window", #selector(NSWindow.performClose(_:)), "w", [.command, .shift]),
+            .separator(),
+            item("Import from Safari…", #selector(AppDelegate.importFromSafari(_:)), "", target: app),
         ]))
 
         main.addItem(submenu("Edit", [

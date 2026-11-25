@@ -59,6 +59,26 @@ public final class History {
         """, [url, title, date.timeIntervalSince1970])
     }
 
+    /// Merges pages from elsewhere (another browser): visits add up, the
+    /// later visit and a non-empty title win. One transaction, so a big
+    /// import is quick.
+    public func importPages(_ pages: [HistoryEntry]) throws {
+        try exec("BEGIN")
+        do {
+            for p in pages {
+                try run("""
+                INSERT INTO pages (url, title, visits, last_visit) VALUES (?1, ?2, ?3, ?4)
+                ON CONFLICT (url) DO UPDATE SET visits = visits + ?3, last_visit = MAX(last_visit, ?4),
+                    title = CASE WHEN title = '' THEN ?2 ELSE title END
+                """, [p.url, p.title, p.visits, p.lastVisit.timeIntervalSince1970])
+            }
+            try exec("COMMIT")
+        } catch {
+            try? exec("ROLLBACK")
+            throw error
+        }
+    }
+
     /// Pages often get their title after they load.
     public func setTitle(_ title: String, for url: String) throws {
         guard !title.isEmpty else { return }

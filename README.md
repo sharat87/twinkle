@@ -35,6 +35,7 @@ Everything lives in `~/Library/Application Support/Twinkle/`:
 | `filters/custom.txt` | Your own filter rules. |
 | `filters/cache/` | Downloaded filter lists. |
 | `zoom.json` | Zoom level per site, like `{"example.com": 1.25}`. Covers subdomains. |
+| `bookmarks.json` | Bookmarks (from Safari), searched by the address bar. |
 | `history.sqlite` | Pages visited (address, title, visits, last visit), kept `historyDays`. Not written for temporary containers. History › Clear History empties it. |
 | `favicons/` | Site icons for the tab list, one small PNG per host. Not written for temporary containers. |
 
@@ -60,6 +61,16 @@ The Twinkle menu opens each of these. WebKit keeps each container's site data un
 ```
 
 `unloadTabsAfterMinutes: 0` keeps every tab loaded. `historyDays: 0` keeps no history.
+
+### Importing from Safari
+
+File › Import from Safari… copies Safari's history, bookmarks and cookies in. macOS keeps those behind Full Disk Access, so first add Twinkle under System Settings › Privacy & Security › Full Disk Access (the import offers to open it), quit and reopen Twinkle, and import. Turn the access off again afterwards if you like. Twinkle is signed ad hoc, so a rebuild in between makes macOS treat it as a different app.
+
+- History is merged into `history.sqlite`: visits add up, pages older than `historyDays` are left out.
+- Bookmarks go into `bookmarks.json` (title, address, folder), which the address bar searches above history. There's no bookmarks bar; edit the file to change them.
+- Cookies go into the container their site always opens in, or no container. Expired ones are skipped.
+
+Running it again only adds what's new.
 
 ### The address bar
 

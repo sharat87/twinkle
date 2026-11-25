@@ -353,3 +353,97 @@ let ddg = "https://duckduckgo.com/?q=%s"
         #expect(s.tabs[0].url == "https://a.com")
     }
 }
+
+@Suite struct SafariImportTests {
+    /// Builds a Cookies.binarycookies file: big-endian header, one page of
+    /// little-endian cookie records.
+    func cookieFile(_ cookies: [(domain: String, name: String, path: String, value: String, expires: Double, flags: UInt32)]) -> Data {
+        func le(_ v: UInt32) -> [UInt8] { (0..<4).map { UInt8((v >> (8 * $0)) & 0xff) } }
+        func be(_ v: UInt32) -> [UInt8] { le(v).reversed() }
+        var records: [[UInt8]] = []
+        for c in cookies {
+            let strings = [c.domain, c.name, c.path, c.value].map { Array($0.utf8) + [0] }
+            var offsets: [UInt32] = []
+            var at: UInt32 = 56
+            for s in strings { offsets.append(at); at += UInt32(s.count) }
+            var r = le(at) + le(0) + le(c.flags) + le(0)
+            for o in offsets { r += le(o) }
+            r += [UInt8](repeating: 0, count: 8)
+            r += withUnsafeBytes(of: c.expires.bitPattern.littleEndian, Array.init)
+            r += withUnsafeBytes(of: Double(0).bitPattern.littleEndian, Array.init)
+            for s in strings { r += s }
+            records.append(r)
+        }
+        var page = [0, 0, 1, 0] + le(UInt32(records.count))
+        var offset = UInt32(8 + 4 * records.count + 4)
+        for r in records { page += le(offset); offset += UInt32(r.count) }
+        page += [0, 0, 0, 0]
+        for r in records { page += r }
+        return Data(Array("cook".utf8) + be(1) + be(UInt32(page.count)) + page + [UInt8](repeating: 0, count: 8))
+    }
+
+    @Test func readsBinaryCookies() throws {
+        let year2030 = Date(timeIntervalSince1970: 1_900_000_000).timeIntervalSinceReferenceDate
+        let data = cookieFile([(".github.com", "logged_in", "/", "yes", year2030, 1 | 4),
+                               ("example.com", "id", "/app", "42", year2030, 0)])
+        let cookies = try Safari.cookies(binary: data)
+        #expect(cookies.count == 2)
+        #expect(cookies[0] == Safari.Cookie(domain: ".github.com", name: "logged_in", path: "/", value: "yes",
+                                           expires: Date(timeIntervalSince1970: 1_900_000_000), secure: true, httpOnly: true))
+        #expect(cookies[0].host == "github.com")
+        #expect(cookies[1].path == "/app" && !cookies[1].secure && !cookies[1].httpOnly)
+        #expect(throws: Safari.Failure.self) { try Safari.cookies(binary: Data("nope".utf8)) }
+    }
+
+    @Test func readsBookmarks() throws {
+        let plist: [String: Any] = [
+            "WebBookmarkType": "WebBookmarkTypeList", "Children": [
+                ["WebBookmarkType": "WebBookmarkTypeProxy", "Title": "History"],
+                ["WebBookmarkType": "WebBookmarkTypeList", "Title": "BookmarksBar", "Children": [
+                    ["WebBookmarkType": "WebBookmarkTypeLeaf", "URLString": "https://github.com/", "URIDictionary": ["title": "GitHub"]],
+                    ["WebBookmarkType": "WebBookmarkTypeList", "Title": "Work", "Children": [
+                        ["WebBookmarkType": "WebBookmarkTypeLeaf", "URLString": "https://linear.app/", "URIDictionary": ["title": "Linear"]],
+                        ["WebBookmarkType": "WebBookmarkTypeLeaf", "URLString": "javascript:alert(1)", "URIDictionary": ["title": "Bookmarklet"]],
+                    ]],
+                ]],
+                ["WebBookmarkType": "WebBookmarkTypeList", "Title": "com.apple.ReadingList", "Children": [
+                    ["WebBookmarkType": "WebBookmarkTypeLeaf", "URLString": "https://example.com/post", "URIDictionary": ["title": "A post"]],
+                ]],
+            ]]
+        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0)
+        #expect(try Safari.bookmarks(plist: data) == [
+            Bookmark(title: "GitHub", url: "https://github.com/", folder: "Favourites"),
+            Bookmark(title: "Linear", url: "https://linear.app/", folder: "Favourites › Work"),
+            Bookmark(title: "A post", url: "https://example.com/post", folder: "Reading List"),
+        ])
+    }
+
+    @Test func readsHistoryAndMerges() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("twinkle-\(UUID())")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let safari = dir.appendingPathComponent("History.db")
+        // Safari's layout, cut down.
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+        p.arguments = [safari.path, """
+            CREATE TABLE history_items (id INTEGER PRIMARY KEY, url TEXT, visit_count INTEGER);
+            CREATE TABLE history_visits (id INTEGER PRIMARY KEY, history_item INTEGER, visit_time REAL, title TEXT);
+            INSERT INTO history_items VALUES (1, 'https://github.com/', 7), (2, 'file:///etc/hosts', 1);
+            INSERT INTO history_visits VALUES (1, 1, 700000000, 'Old title'), (2, 1, 800000000, 'GitHub'), (3, 2, 800000000, 'hosts');
+            """]
+        try p.run()
+        p.waitUntilExit()
+        let pages = try Safari.history(from: safari)
+        #expect(pages == [HistoryEntry(url: "https://github.com/", title: "GitHub", visits: 7,
+                                       lastVisit: Date(timeIntervalSinceReferenceDate: 800000000))])
+
+        let mine = try History(path: dir.appendingPathComponent("twinkle.sqlite").path)
+        try mine.recordVisit(url: "https://github.com/", title: "Mine", at: Date(timeIntervalSinceReferenceDate: 750000000))
+        try mine.importPages(pages)
+        try mine.importPages(pages + [HistoryEntry(url: "https://new.example/", title: "", visits: 2, lastVisit: .now)])
+        let all = try mine.all()
+        let gh = all.first { $0.url == "https://github.com/" }!
+        #expect(gh.visits == 15 && gh.title == "Mine" && gh.lastVisit == Date(timeIntervalSinceReferenceDate: 800000000))
+        #expect(all.count == 2)
+    }
+}

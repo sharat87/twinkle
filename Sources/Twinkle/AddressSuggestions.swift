@@ -146,6 +146,8 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         let now = Date()
         let index = AppState.shared.suggestionIndex
         let history = index.search(query, limit: 12, now: now)
+        // Bookmarks rank above plain history.
+        let bookmarks = AppState.shared.bookmarkIndex.search(query, limit: 5, now: now).map { ($0.entry, $0.score + 25) }
 
         // Open tabs, apart from the one in front, scored like history.
         let front = current()
@@ -160,7 +162,8 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         fieldText = typed
         if complete, !query.contains(" ") {
             let lower = typed.lowercased()
-            let candidates = tabMatches.prefix(3).compactMap { $0.0.url?.absoluteString } + history.prefix(6).map(\.entry.url)
+            let candidates = tabMatches.prefix(3).compactMap { $0.0.url?.absoluteString } + bookmarks.prefix(3).map(\.0.url)
+                + history.prefix(6).map(\.entry.url)
             for url in candidates {
                 let bare = HistoryIndex.bare(url)
                 guard bare.hasPrefix(lower), bare.count > lower.count else { continue }
@@ -181,8 +184,10 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         // Tabs and history together, best first; each page once.
         var rows: [Row] = [typedRow(fieldText, index: index)]
         var shown = Set([rows[0].url.map { HistoryIndex.bare($0.absoluteString) } ?? ""])
-        enum Source { case tab(Tab), page(HistoryEntry) }
-        let ranked = (tabMatches.prefix(3).map { (Source.tab($0.0), $0.1) } + history.map { (Source.page($0.entry), $0.score) })
+        enum Source { case tab(Tab), page(HistoryEntry), bookmark(HistoryEntry) }
+        let ranked = (tabMatches.prefix(3).map { (Source.tab($0.0), $0.1) }
+            + bookmarks.map { (Source.bookmark($0.0), $0.1) }
+            + history.map { (Source.page($0.entry), $0.score) })
             .sorted { $0.1 > $1.1 }
         for (source, _) in ranked where rows.count < Self.maxRows {
             switch source {
@@ -194,6 +199,11 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
                 guard shown.insert(HistoryIndex.bare(entry.url)).inserted, let url = URL(string: entry.url) else { continue }
                 rows.append(Row(kind: .page, title: entry.title.isEmpty ? Self.display(entry.url) : entry.title,
                                 detail: Self.display(entry.url), url: url))
+            case .bookmark(let entry):
+                guard shown.insert(HistoryIndex.bare(entry.url)).inserted, let url = URL(string: entry.url) else { continue }
+                let folder = AppState.shared.bookmarkFolders[entry.url] ?? ""
+                rows.append(Row(kind: .page, title: entry.title.isEmpty ? Self.display(entry.url) : entry.title,
+                                detail: "★ " + (folder.isEmpty ? "" : folder + " · ") + Self.display(entry.url), url: url))
             }
         }
         self.rows = rows
@@ -213,10 +223,17 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
             let engine = URL(string: settings.searchURL)?.host() ?? "the web"
             return Row(kind: .typed, title: "Search for “\(text)”", detail: engine, url: nil)
         }
-        let known = index.entry(for: url.absoluteString)
-            ?? index.entry(for: url.absoluteString + "/")
+        let bookmarks = AppState.shared.bookmarkIndex
+        let keys = [url.absoluteString, url.absoluteString + "/"]
+        let bookmark = keys.lazy.compactMap { bookmarks.entry(for: $0) }.first
+        let known = bookmark ?? keys.lazy.compactMap { index.entry(for: $0) }.first
         let title = known.map(\.title).flatMap { $0.isEmpty ? nil : $0 } ?? Self.display(url.absoluteString)
-        return Row(kind: .typed, title: title, detail: Self.display(url.absoluteString), url: url)
+        var detail = Self.display(url.absoluteString)
+        if let bookmark {
+            let folder = AppState.shared.bookmarkFolders[bookmark.url] ?? ""
+            detail = "★ " + (folder.isEmpty ? "" : folder + " · ") + detail
+        }
+        return Row(kind: .typed, title: title, detail: detail, url: url)
     }
 
     static func display(_ url: String) -> String {

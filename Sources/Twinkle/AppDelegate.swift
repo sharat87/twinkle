@@ -62,6 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(AppState.shared.files.directory)
     }
 
+    @objc func importFromSafari(_ sender: Any?) {
+        SafariImporter.run()
+    }
+
     @objc func clearHistory(_ sender: Any?) {
         let alert = NSAlert()
         alert.messageText = "Clear all history?"
