@@ -58,6 +58,26 @@ enum Debug {
                 _ = NSApp.sendAction(selector, to: target, from: nil)
             }
         }
+        // `./debug.sh mouse <button>`: a click of that mouse button in the
+        // middle of the window (3 is the back side button, 4 forward),
+        // queued like a real one so event monitors see it.
+        DistributedNotificationCenter.default().addObserver(forName: .init("dev.twinkle.debug.mouse"), object: nil, queue: .main) { note in
+            let button = Int(note.object as? String ?? "") ?? 3
+            MainActor.assumeIsolated {
+                guard let window = controller()?.window, let view = window.contentView else { return }
+                let point = NSPoint(x: view.bounds.midX, y: view.bounds.midY)
+                for type in [NSEvent.EventType.otherMouseDown, .otherMouseUp] {
+                    guard let event = NSEvent.mouseEvent(
+                        with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)
+                    else { continue }
+                    // mouseEvent(with:) has no button argument; CGEvent does.
+                    guard let cg = event.cgEvent else { continue }
+                    cg.setIntegerValueField(.mouseEventButtonNumber, value: Int64(button))
+                    if let withButton = NSEvent(cgEvent: cg) { NSApp.postEvent(withButton, atStart: false) }
+                }
+            }
+        }
         // `./debug.sh select <index>`
         DistributedNotificationCenter.default().addObserver(forName: selectNotification, object: nil, queue: .main) { note in
             let index = Int(note.object as? String ?? "") ?? -1

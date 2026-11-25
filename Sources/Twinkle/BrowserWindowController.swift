@@ -48,6 +48,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     private var statusTimer: Timer?
     private var saveTimer: Timer?
     private var keyMonitor: Any?
+    private var mouseMonitor: Any?
     private var syncingSelection = false
 
     var current: Tab? { tabs.indices.contains(selected) ? tabs[selected] : nil }
@@ -350,29 +351,40 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     func closeTab(at index: Int) {
-        guard tabs.indices.contains(index) else { return }
-        let tab = tabs[index]
-        let temporary = AppState.shared.isTemporary(tab.containerID)
-        if let saved = tab.saved {
-            closedTabs.append((saved, temporary))
-            if closedTabs.count > 50 { closedTabs.removeFirst() }
+        closeTabs(at: IndexSet(integer: index))
+    }
+
+    /// Closes several tabs at once; each can come back with Reopen Closed
+    /// Tab. If the front tab goes, the first tab after the closed ones
+    /// takes its place.
+    func closeTabs(at indices: IndexSet) {
+        let indices = indices.filteredIndexSet { tabs.indices.contains($0) }
+        guard let last = indices.last else { return }
+        let closing = indices.map { tabs[$0] }
+        for tab in closing {
+            let temporary = AppState.shared.isTemporary(tab.containerID)
+            if let saved = tab.saved {
+                closedTabs.append((saved, temporary))
+                if closedTabs.count > 50 { closedTabs.removeFirst() }
+            }
+            tab.close()
         }
-        tab.close()
-        tabs.remove(at: index)
-        if temporary, let id = tab.containerID, !tabs.contains(where: { $0.containerID == id }) {
+        for index in indices.reversed() { tabs.remove(at: index) }
+        for id in Set(closing.compactMap(\.containerID))
+        where AppState.shared.isTemporary(id) && !tabs.contains(where: { $0.containerID == id }) {
             AppState.shared.releaseTemporary(id)
         }
 
         if tabs.isEmpty {
             selected = -1
-            openTab(url: nil, container: tab.containerID)
+            openTab(url: nil, container: closing.last?.containerID)
             return
         }
-        var next = selected
-        if index < selected {
-            next -= 1
-        } else if index == selected {
-            next = min(index, tabs.count - 1)
+        let next: Int
+        if indices.contains(selected) {
+            next = min(last + 1 - indices.count, tabs.count - 1)
+        } else {
+            next = selected - indices.count(in: 0..<max(selected, 0))
         }
         selected = -1
         table.reloadData()
@@ -535,6 +547,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
         menu.addItem(.separator())
         menu.addItem(item("Close Tab", #selector(closeRow(_:))))
+        if tabs.count > 1 { menu.addItem(item("Close Other Tabs", #selector(closeOtherRows(_:)))) }
+        if row < tabs.count - 1 { menu.addItem(item("Close Tabs Below", #selector(closeRowsBelow(_:)))) }
     }
 
     @objc private func reloadRow(_ sender: NSMenuItem) {
@@ -569,6 +583,29 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     @objc private func closeRow(_ sender: NSMenuItem) {
         closeTab(at: sender.tag)
+    }
+
+    @objc private func closeOtherRows(_ sender: NSMenuItem) {
+        closeTabs(otherThan: sender.tag)
+    }
+
+    @objc private func closeRowsBelow(_ sender: NSMenuItem) {
+        closeTabs(below: sender.tag)
+    }
+
+    private func closeTabs(otherThan row: Int) {
+        guard tabs.indices.contains(row) else { return }
+        var others = IndexSet(integersIn: tabs.indices)
+        others.remove(row)
+        // The kept tab comes to the front, so nothing else loads first.
+        if row != selected { select(row) }
+        closeTabs(at: others)
+    }
+
+    private func closeTabs(below row: Int) {
+        guard tabs.indices.contains(row), row < tabs.count - 1 else { return }
+        if selected > row { select(row) }
+        closeTabs(at: IndexSet(integersIn: row + 1..<tabs.count))
     }
 
     /// A tab can't change cookie jars while open; it is replaced by a new tab
@@ -780,6 +817,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         closeTab(at: selected)
     }
 
+    @objc func closeOtherTabs(_ sender: Any?) {
+        closeTabs(otherThan: selected)
+    }
+
+    @objc func closeTabsBelow(_ sender: Any?) {
+        closeTabs(below: selected)
+    }
+
     @objc func reopenClosedTab(_ sender: Any?) {
         guard let (saved, temporary) = closedTabs.popLast(), let url = URL(string: saved.url) else { return }
         // A closed temporary container's data is gone; a new one stands in.
@@ -959,6 +1004,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             item.title = host.map { "Clear Cookies and Data for \($0)" } ?? "Clear Cookies and Data for This Site"
             return host != nil
         case #selector(reopenClosedTab(_:)): return !closedTabs.isEmpty
+        case #selector(closeOtherTabs(_:)): return tabs.count > 1
+        case #selector(closeTabsBelow(_:)): return selected < tabs.count - 1
         case #selector(reopenInContainer(_:)):
             item.state = ContainerMenus.isCurrent(item, current?.containerID) ? .on : .off
             return current?.url != nil
@@ -985,6 +1032,16 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             guard flags.contains(.control), !flags.contains(.command) else { return event }
             if flags.contains(.shift) { self.previousTab(nil) } else { self.nextTab(nil) }
+            return nil
+        }
+        // The side buttons on a mouse (3 and 4, counting from 0) go back and
+        // forward, on release like Safari. Both halves of the click are kept
+        // from the page so it doesn't act on them too.
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.otherMouseDown, .otherMouseUp]) { [weak self] event in
+            guard let self, event.window === self.window, [3, 4].contains(event.buttonNumber) else { return event }
+            if event.type == .otherMouseUp {
+                if event.buttonNumber == 3 { self.goBack(nil) } else { self.goForward(nil) }
+            }
             return nil
         }
     }

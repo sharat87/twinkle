@@ -7,6 +7,7 @@
 #   ./debug.sh type <text>              ⌘L, then type into the address field
 #   ./debug.sh key <down|up|enter|cmd-enter|tab|escape|delete>
 #   ./debug.sh action <selector:>        run a menu command
+#   ./debug.sh mouse <button>           click a mouse button mid-window (3 back, 4 forward)
 # Writes state.json, window.png, page.png to ~/Library/Application Support/Twinkle/debug/.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -17,7 +18,7 @@ if [[ "${1:-}" == "open" ]]; then
   "$tool" dev.twinkle.debug.open "$2"$'\t'"${3:-}"
   exit 0
 fi
-if [[ "${1:-}" =~ ^(select|type|key|action)$ ]]; then
+if [[ "${1:-}" =~ ^(select|type|key|action|mouse)$ ]]; then
   "$tool" "dev.twinkle.debug.$1" "${2:-}"
   exit 0
 fi
