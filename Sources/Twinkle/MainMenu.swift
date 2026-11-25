@@ -23,6 +23,7 @@ enum MainMenu {
             item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),
             item("Show All", #selector(NSApplication.unhideAllApplications(_:))),
             .separator(),
+            item("Restart Twinkle", #selector(AppDelegate.restart(_:)), target: app),
             item("Quit Twinkle", #selector(NSApplication.terminate(_:)), "q"),
         ]))
 

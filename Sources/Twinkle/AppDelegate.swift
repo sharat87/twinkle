@@ -43,6 +43,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         controller?.saveSession()
+        if restarting { relaunch() }
+    }
+
+    private var restarting = false
+
+    /// Quits as usual, then opens the app at the same path, which after
+    /// `./build.sh` is the new build, with the same `--profile`. Set only
+    /// once quitting is certain, in applicationWillTerminate, so a cancelled
+    /// quit never leaves a relaunch waiting.
+    @objc func restart(_ sender: Any?) {
+        restarting = true
+        NSApp.terminate(nil)
+        restarting = false
+    }
+
+    private func relaunch() {
+        var args = ["-c", #"while kill -0 "$0" 2>/dev/null; do sleep 0.1; done; exec /usr/bin/open -n "$@""#,
+                    String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundlePath]
+        if let profile = AppState.shared.profile { args += ["--args", "--profile", profile] }
+        let helper = Process()
+        helper.executableURL = URL(fileURLWithPath: "/bin/sh")
+        helper.arguments = args
+        try? helper.run()
     }
 
     // MARK: Menu actions
