@@ -8,6 +8,7 @@
 #   ./debug.sh key <down|up|enter|cmd-enter|tab|escape|delete>
 #   ./debug.sh action <selector:>        run a menu command
 #   ./debug.sh mouse <button>           click a mouse button mid-window (3 back, 4 forward)
+#   ./debug.sh appearance <light|dark|system>   for screenshots of both
 # Writes state.json, window.png, page.png to ~/Library/Application Support/Twinkle/debug/.
 # TWINKLE_PROFILE=<folder> ./debug.sh … drives the Twinkle started with
 # `./build.sh release run --profile <folder>` instead, and its files are in <folder>/debug/.
@@ -26,7 +27,7 @@ if [[ "${1:-}" == "open" ]]; then
   "$tool" "dev.twinkle.debug.open$suffix" "$2"$'\t'"${3:-}"
   exit 0
 fi
-if [[ "${1:-}" =~ ^(select|type|key|action|mouse)$ ]]; then
+if [[ "${1:-}" =~ ^(select|type|key|action|mouse|appearance)$ ]]; then
   "$tool" "dev.twinkle.debug.$1$suffix" "${2:-}"
   exit 0
 fi

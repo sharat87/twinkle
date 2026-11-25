@@ -85,6 +85,15 @@ enum Debug {
                 }
             }
         }
+        // `./debug.sh appearance <light|dark|system>`: for screenshots of
+        // both, without changing the Mac's own setting.
+        DistributedNotificationCenter.default().addObserver(forName: name("appearance"), object: nil, queue: .main) { note in
+            let value = note.object as? String ?? ""
+            MainActor.assumeIsolated {
+                NSApp.appearance = value == "dark" ? NSAppearance(named: .darkAqua)
+                    : value == "light" ? NSAppearance(named: .aqua) : nil
+            }
+        }
         // `./debug.sh select <index>`
         DistributedNotificationCenter.default().addObserver(forName: selectNotification, object: nil, queue: .main) { note in
             let index = Int(note.object as? String ?? "") ?? -1

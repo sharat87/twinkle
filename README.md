@@ -2,6 +2,11 @@
 
 A minimal web browser for macOS, built on the system's WebKit. Vibed just for myself; I expect it to be "finished" after a few weeks of use, so it's not looking for features.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+  <img alt="Twinkle showing Apple's WKWebView documentation in a Work container, with the tab list on the right" src="docs/screenshot-light.png">
+</picture>
+
 **The UI surface is kept small:**
 
 - **Settings, containers and bookmarks are JSON files** you edit in your text editor. No preferences window. They're re-read whenever Twinkle comes to the front.

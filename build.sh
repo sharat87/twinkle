@@ -17,7 +17,7 @@ instances() {
   for pid in $(pgrep -x Twinkle); do
     args="$(ps -o args= -p "$pid" || true)"
     if [[ -n "$profile" ]]; then
-      [[ "$args" == *"--profile $profile" ]] && echo "$pid"
+      [[ "$args " == *"--profile $profile "* ]] && echo "$pid"
     else
       [[ "$args" != *"--profile "* ]] && echo "$pid"
     fi
