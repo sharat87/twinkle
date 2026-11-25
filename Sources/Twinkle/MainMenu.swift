@@ -33,7 +33,7 @@ enum MainMenu {
             newInContainer,
             item("New Temporary Container Tab", #selector(BrowserWindowController.newTemporaryTab(_:)), "t", [.command, .option]),
             item("New Container…", #selector(BrowserWindowController.newContainer(_:)), "n", [.command, .shift]),
-            item("Open Location…", #selector(BrowserWindowController.openLocation(_:)), "l"),
+            item("Open Location…", #selector(BrowserWindowController.focusAddress(_:)), "l"),
             .separator(),
             item("Reopen Closed Tab", #selector(BrowserWindowController.reopenClosedTab(_:)), "t", [.command, .shift]),
             item("Close Tab", #selector(BrowserWindowController.closeCurrentTab(_:)), "w"),

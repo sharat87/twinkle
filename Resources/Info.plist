@@ -50,19 +50,7 @@
 				<string>https</string>
 			</array>
 		</dict>
-		<!-- twinkle://open and twinkle://switch, from the Alfred workflow. -->
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>Twinkle command</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>twinkle</string>
-			</array>
-		</dict>
 	</array>
-	<!-- Asked once, when ⌘L first hands the address to Alfred. -->
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Twinkle opens Alfred as its address bar.</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

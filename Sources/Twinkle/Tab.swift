@@ -19,7 +19,7 @@ protocol TabHost: AnyObject {
 /// display, so tabs restored from the last session cost nothing until clicked.
 @MainActor
 final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
-    /// Saved with the session, so the Alfred workflow can name this tab.
+    /// Saved with the session.
     let id: UUID
     let containerID: UUID?
     weak var host: TabHost?
@@ -277,12 +277,6 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
 
         // mailto:, zoommtg:, etc. go to the app that handles them.
         let scheme = url.scheme?.lowercased() ?? ""
-        // twinkle:// links drive the browser itself (the Alfred workflow);
-        // pages don't get to use them.
-        if scheme == "twinkle" {
-            decisionHandler(.cancel)
-            return
-        }
         if !Self.webSchemes.contains(scheme) {
             if action.navigationType == .linkActivated || action.targetFrame?.isMainFrame != false {
                 NSWorkspace.shared.open(url)

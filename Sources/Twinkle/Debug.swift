@@ -37,6 +37,16 @@ enum Debug {
                 c.openTab(url: url, container: container?.id)
             }
         }
+        // `./debug.sh type <text>` and `./debug.sh key <name>`: the address
+        // field, as if typed, one character at a time.
+        DistributedNotificationCenter.default().addObserver(forName: .init("dev.twinkle.debug.type"), object: nil, queue: .main) { note in
+            let text = note.object as? String ?? ""
+            MainActor.assumeIsolated { controller()?.debugType(text) }
+        }
+        DistributedNotificationCenter.default().addObserver(forName: .init("dev.twinkle.debug.key"), object: nil, queue: .main) { note in
+            let key = note.object as? String ?? ""
+            MainActor.assumeIsolated { controller()?.debugKey(key) }
+        }
         // `./debug.sh select <index>`
         DistributedNotificationCenter.default().addObserver(forName: selectNotification, object: nil, queue: .main) { note in
             let index = Int(note.object as? String ?? "") ?? -1
@@ -51,6 +61,11 @@ enum Debug {
         let state = controller.debugState()
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: dir.appendingPathComponent("state.json"))
+        }
+
+        if let panel = controller.debugSuggestionsView(), let rep = panel.bitmapImageRepForCachingDisplay(in: panel.bounds) {
+            panel.cacheDisplay(in: panel.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("suggestions.png"))
         }
 
         if let frame = controller.window?.contentView?.superview,
@@ -125,6 +140,7 @@ extension BrowserWindowController {
                 ]
             },
             "blockerLists": Blocker.shared.lists.compactMap(\.identifier),
+            "address": debugAddress(),
         ]
     }
 }

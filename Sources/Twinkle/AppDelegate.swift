@@ -8,7 +8,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = AppState.shared
-        AppState.shared.linkQueryHelper()
         Blocker.shared.start()
         NSApp.mainMenu = MainMenu.build(app: self)
         NotificationCenter.default.addObserver(forName: .containersChanged, object: nil, queue: .main) { _ in

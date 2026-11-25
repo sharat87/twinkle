@@ -2,7 +2,7 @@ import Foundation
 
 /// One tab as it is saved between launches.
 public struct SavedTab: Codable, Equatable, Sendable {
-    /// Lets the Alfred workflow name a tab to switch to.
+    /// Stays the same across launches.
     public var id: UUID
     public var url: String
     public var title: String
@@ -39,19 +39,3 @@ public struct Session: Codable, Equatable, Sendable {
     }
 }
 
-/// `current.json`: the page in front, kept up to date for the Alfred helper
-/// (session.json is saved a couple of seconds after changes). Empty for a
-/// temporary container's tab, whose address isn't written anywhere.
-public struct CurrentPage: Codable, Equatable, Sendable {
-    public var url: String
-    public var title: String
-    public var tab: UUID?
-
-    public init(url: String, title: String, tab: UUID?) {
-        self.url = url
-        self.title = title
-        self.tab = tab
-    }
-
-    public static let file = "current.json"
-}

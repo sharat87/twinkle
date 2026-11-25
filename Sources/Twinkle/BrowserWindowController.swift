@@ -42,6 +42,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     private let findField = NSSearchField()
     private let findResult = NSTextField(labelWithString: "")
     private let pageArea = NSView()
+    private lazy var suggestions = makeSuggestions()
 
     private var statusFile: URL?
     private var statusTimer: Timer?
@@ -423,19 +424,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
         window?.title = WindowTitle.make(title: tab.pageTitle, url: tab.url,
                                          format: AppState.shared.settings.windowTitleFormat)
-        writeCurrentPage(tab)
-    }
-
-    private var writtenCurrent: CurrentPage?
-
-    /// For the Alfred workflow, which opens on ⌘L with the current page first.
-    private func writeCurrentPage(_ tab: Tab) {
-        let page = AppState.shared.isTemporary(tab.containerID)
-            ? CurrentPage(url: "", title: "", tab: nil)
-            : CurrentPage(url: tab.url?.absoluteString ?? "", title: tab.pageTitle, tab: tab.id)
-        guard page != writtenCurrent else { return }
-        writtenCurrent = page
-        try? AppState.shared.files.save(page, to: CurrentPage.file)
     }
 
     // MARK: TabHost
@@ -598,6 +586,81 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     // MARK: Address field
 
+    private func makeSuggestions() -> AddressSuggestions {
+        let s = AddressSuggestions(field: addressField, anchor: addressBox)
+        s.tabs = { [unowned self] in tabs }
+        s.current = { [unowned self] in current }
+        s.open = { [unowned self] url, newTab in
+            if newTab || current == nil {
+                openTab(url: url, container: current?.containerID, at: selected + 1)
+            } else if let tab = current {
+                tab.load(url)
+                select(selected)
+                window?.makeFirstResponder(tab.webView)
+            }
+            updateChrome()
+        }
+        s.switchTo = { [unowned self] tab in
+            addressField.stringValue = current?.url?.absoluteString ?? ""
+            if let i = index(of: tab) { select(i) }
+            window?.makeFirstResponder(current?.webView)
+            updateChrome()
+        }
+        return s
+    }
+
+    func debugType(_ text: String) {
+        focusAddress(nil)
+        guard let editor = addressField.currentEditor() as? NSTextView else { return }
+        let start = Date()
+        for ch in text { editor.insertText(String(ch), replacementRange: editor.selectedRange()) }
+        debugTypeMs = Date().timeIntervalSince(start) * 1000 / Double(max(1, text.count))
+    }
+    private static var typeMs = 0.0
+    var debugTypeMs: Double { get { Self.typeMs } set { Self.typeMs = newValue } }
+
+    func debugKey(_ key: String) {
+        guard let editor = addressField.currentEditor() as? NSTextView else { return }
+        let selectors: [String: Selector] = [
+            "down": #selector(NSResponder.moveDown(_:)), "up": #selector(NSResponder.moveUp(_:)),
+            "enter": #selector(NSResponder.insertNewline(_:)), "tab": #selector(NSResponder.insertTab(_:)),
+            "escape": #selector(NSResponder.cancelOperation(_:)), "delete": #selector(NSResponder.deleteBackward(_:)),
+        ]
+        if key == "cmd-enter" {
+            _ = suggestions.handle(#selector(NSResponder.insertNewline(_:)), newTab: true)
+        } else if let selector = selectors[key] {
+            editor.doCommand(by: selector)
+        }
+    }
+
+    func debugAddress() -> [String: Any] {
+        let range = addressField.currentEditor()?.selectedRange ?? NSRange()
+        return ["text": addressField.stringValue, "editing": addressField.currentEditor() != nil,
+                "selection": [range.location, range.length], "msPerKey": debugTypeMs, "suggestions": suggestions.debugRows]
+    }
+
+    func debugSuggestionsView() -> NSView? { suggestions.isVisible ? suggestions.contentView : nil }
+
+    func controlTextDidBeginEditing(_ obj: Notification) {
+        if (obj.object as? NSTextField) === addressField { suggestions.began() }
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        if (obj.object as? NSTextField) === addressField { suggestions.textChanged() }
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        if (obj.object as? NSTextField) === addressField { suggestions.hide() }
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        suggestions.reposition()
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        suggestions.hide()
+    }
+
     @objc private func addressEntered(_ sender: NSTextField) {
         guard let url = Address.resolve(sender.stringValue, searchTemplate: AppState.shared.settings.searchURL) else { return }
         if let tab = current {
@@ -611,6 +674,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        if control === addressField, suggestions.handle(selector) { return true }
         if selector == #selector(NSResponder.cancelOperation(_:)) {
             if control === addressField {
                 addressField.stringValue = current?.url?.absoluteString ?? ""
@@ -723,51 +787,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         openTab(url: url, container: container, at: selected + 1, title: saved.title, exempt: true)
     }
 
-    /// ⌘L: Alfred, if that's the address input in settings and it
-    /// answers; otherwise the field in the toolbar.
-    @objc func openLocation(_ sender: Any?) {
-        if AppState.shared.settings.addressInput == "alfred",
-           Alfred.showAddress(current?.url?.absoluteString ?? "") {
-            return
-        }
-        focusAddress(sender)
-    }
-
-    /// A link from another app: twinkle:// links are commands (from the
-    /// Alfred workflow), anything else opens in a new tab.
+    /// A link from another app opens in a new tab.
     func open(_ url: URL) {
-        if url.scheme?.lowercased() == "twinkle" { handleLink(url) } else { openTab(url: url, container: nil) }
-    }
-
-    /// twinkle://open?input=<text>[&tab=new] and twinkle://switch?tab=<id>.
-    /// Only web addresses and searches: a link can't open local files.
-    private func handleLink(_ link: URL) {
-        let items = URLComponents(url: link, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
-        switch link.host()?.lowercased() {
-        case "open":
-            guard let input = value("input"),
-                  let url = Address.resolve(input, searchTemplate: AppState.shared.settings.searchURL),
-                  ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return }
-            if value("tab") == "new" || current == nil {
-                openTab(url: url, container: current?.containerID, at: selected + 1)
-            } else if let tab = current {
-                tab.load(url)
-                select(selected)
-                window?.makeFirstResponder(tab.webView)
-            }
-        case "switch":
-            if let id = value("tab").flatMap(UUID.init(uuidString:)), let i = tabs.firstIndex(where: { $0.id == id }) {
-                select(i)
-            }
-        default:
-            return
-        }
-        showWindow(nil)
-        NSApp.activate()
+        openTab(url: url, container: nil)
     }
 
     @objc func focusAddress(_ sender: Any?) {
+        suggestions.prepare()
         window?.makeFirstResponder(addressField)
         addressField.currentEditor()?.selectAll(nil)
     }

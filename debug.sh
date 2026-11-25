@@ -4,6 +4,8 @@
 #   ./debug.sh open <url> [container]   open a tab, optionally in a container
 #                                       ("temporary" makes a temporary one)
 #   ./debug.sh select <index>           bring a tab to the front
+#   ./debug.sh type <text>              ⌘L, then type into the address field
+#   ./debug.sh key <down|up|enter|cmd-enter|tab|escape|delete>
 # Writes state.json, window.png, page.png to ~/Library/Application Support/Twinkle/debug/.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -14,8 +16,8 @@ if [[ "${1:-}" == "open" ]]; then
   "$tool" dev.twinkle.debug.open "$2"$'\t'"${3:-}"
   exit 0
 fi
-if [[ "${1:-}" == "select" ]]; then
-  "$tool" dev.twinkle.debug.select "$2"
+if [[ "${1:-}" =~ ^(select|type|key)$ ]]; then
+  "$tool" "dev.twinkle.debug.$1" "${2:-}"
   exit 0
 fi
 rm -f "$dir/state.json"

@@ -257,33 +257,10 @@ let ddg = "https://duckduckgo.com/?q=%s"
         let h = try store()
         try h.recordVisit(url: "https://github.com/", title: "GitHub", at: now)
         try h.recordVisit(url: "https://github.com/", title: "", at: now)
-        let found = try h.search("git", now: now)
-        #expect(found.count == 1)
-        #expect(found[0].visits == 2)
-        #expect(found[0].title == "GitHub")
-    }
-
-    @Test func everyWordMustMatch() throws {
-        let h = try store()
-        try h.recordVisit(url: "https://news.ycombinator.com/item?id=1", title: "Swift concurrency explained", at: now)
-        try h.recordVisit(url: "https://swift.org/", title: "Swift.org", at: now)
-        #expect(try h.search("swift concurrency", now: now).map(\.url) == ["https://news.ycombinator.com/item?id=1"])
-        #expect(try h.search("swift nothing", now: now).isEmpty)
-        #expect(try h.search("100%_", now: now).isEmpty)
-    }
-
-    @Test func typedAddressBeatsMentions() throws {
-        let h = try store()
-        let day = 86_400.0
-        for _ in 0..<20 { try h.recordVisit(url: "https://news.example.com/github-story", title: "Why github is down", at: now) }
-        try h.recordVisit(url: "https://github.com/", title: "GitHub", at: now.addingTimeInterval(-3 * day))
-        #expect(try h.search("gith", now: now).first?.url == "https://github.com/")
-    }
-
-    @Test func recentBeatsStaleAtEqualVisits() {
-        let old = HistoryEntry(url: "https://a.com/x", title: "", visits: 5, lastVisit: now.addingTimeInterval(-90 * 86_400))
-        let new = HistoryEntry(url: "https://a.com/y", title: "", visits: 5, lastVisit: now)
-        #expect(HistoryRanking.rank([old, new], words: ["a"], now: now).first == new)
+        let all = try h.all()
+        #expect(all.count == 1)
+        #expect(all[0].visits == 2)
+        #expect(all[0].title == "GitHub")
     }
 
     @Test func forgetOld() throws {
@@ -291,7 +268,84 @@ let ddg = "https://duckduckgo.com/?q=%s"
         try h.recordVisit(url: "https://old.com/", title: "", at: now.addingTimeInterval(-400 * 86_400))
         try h.recordVisit(url: "https://new.com/", title: "", at: now)
         try h.forget(before: now.addingTimeInterval(-180 * 86_400))
-        #expect(try h.search("", now: now).map(\.url) == ["https://new.com/"])
+        #expect(try h.all().map(\.url) == ["https://new.com/"])
+    }
+
+    func index(_ pages: [(String, String, Int, Double)]) -> HistoryIndex {
+        HistoryIndex(pages.map { HistoryEntry(url: $0.0, title: $0.1, visits: $0.2, lastVisit: now.addingTimeInterval(-$0.3 * 86_400)) })
+    }
+
+    @Test func fuzzyInOrder() {
+        var rows: [Int32] = []
+        #expect(Fuzzy.score(Array("ghb".utf8), in: Array("github.com".utf8), rows: &rows) != nil)
+        #expect(Fuzzy.score(Array("bhg".utf8), in: Array("github.com".utf8), rows: &rows) == nil)
+        // Together and at word starts beats scattered.
+        let tight = Fuzzy.score(Array("pull".utf8), in: Array("github.com/a/b/pull/1".utf8), rows: &rows)!
+        let loose = Fuzzy.score(Array("pull".utf8), in: Array("example.com/p/u/l/l".utf8), rows: &rows)!
+        #expect(tight > loose)
+    }
+
+    @Test func everyWordMustMatch() {
+        let h = index([("https://news.ycombinator.com/item?id=1", "Swift concurrency explained", 1, 0),
+                       ("https://swift.org/", "Swift.org", 1, 0)])
+        #expect(h.search("swift concurrency", now: now).map(\.entry.url) == ["https://news.ycombinator.com/item?id=1"])
+        #expect(h.search("swift zzz", now: now).isEmpty)
+    }
+
+    @Test func typedAddressBeatsMentions() {
+        let h = index([("https://news.example.com/github-story", "Why github is down", 20, 0),
+                       ("https://github.com/", "GitHub", 1, 3)])
+        #expect(h.search("gith", now: now).first?.entry.url == "https://github.com/")
+    }
+
+    @Test func abbreviations() {
+        let h = index([("https://github.com/apple/swift/pulls", "Pull requests · apple/swift", 2, 1),
+                       ("https://developer.apple.com/documentation/swiftui", "SwiftUI | Apple Developer", 2, 1),
+                       ("https://example.com/", "Example", 2, 1)])
+        #expect(h.search("ghpulls", now: now).first?.entry.url == "https://github.com/apple/swift/pulls")
+        #expect(h.search("devswui", now: now).first?.entry.url == "https://developer.apple.com/documentation/swiftui")
+    }
+
+    @Test func queryStringsDontMatch() {
+        let h = index([("https://accounts.example.com/signin?continue=https://mail.example.com/&flow=GlifWebSignIn", "Sign in", 1, 0)])
+        #expect(h.search("glif", now: now).isEmpty)
+    }
+
+    @Test func recentBeatsStaleAtEqualVisits() {
+        let h = index([("https://a.com/x", "", 5, 90), ("https://a.com/y", "", 5, 0)])
+        #expect(h.search("a.com", now: now).first?.entry.url == "https://a.com/y")
+    }
+
+    @Test func keepsUpToDate() {
+        let h = HistoryIndex()
+        h.recordVisit(url: "https://a.com/", title: "", at: now)
+        h.setTitle("Alpha", for: "https://a.com/")
+        h.recordVisit(url: "https://a.com/", title: "", at: now)
+        #expect(h.entry(for: "https://a.com/")?.visits == 2)
+        #expect(h.search("alph", now: now).first?.entry.title == "Alpha")
+        #expect(HistoryIndex.bare("https://www.GitHub.com/") == "github.com")
+        #expect(HistoryIndex.bare("https://github.com/a/") == "github.com/a/")
+    }
+
+    @Test func fastOnABigHistory() {
+        var pages: [HistoryEntry] = []
+        let words = ["swift", "github", "docs", "issue", "pull", "react", "news", "blog", "api", "search"]
+        for i in 0..<50_000 {
+            let w = words[i % words.count], v = words[(i / 10) % words.count]
+            pages.append(HistoryEntry(url: "https://\(w)\(i % 300).example.com/\(v)/\(i)/some-longer-path-here?q=\(i)",
+                                      title: "\(v.capitalized) \(w) page number \(i)", visits: 1 + i % 7,
+                                      lastVisit: now.addingTimeInterval(-Double(i % 180) * 86_400)))
+        }
+        let h = HistoryIndex(pages)
+        var total = 0.0
+        for q in ["s", "sw", "swi", "swif", "swift", "gh is", "docs api 12"] {
+            let start = Date()
+            _ = h.search(q, now: now)
+            let t = Date().timeIntervalSince(start)
+            total += t
+            print("HistoryIndex: \(q): \(String(format: "%.1f", t * 1000)) ms over 50k pages")
+        }
+        #expect(total / 7 < 1)   // generous: a debug build is far slower than release
     }
 
     @Test func sessionsWithoutTabIdsStillLoad() throws {

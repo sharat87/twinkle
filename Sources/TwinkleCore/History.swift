@@ -19,12 +19,8 @@ public struct HistoryEntry: Equatable, Sendable {
 }
 
 /// `history.sqlite`: every page visited, one row per address. SQLite in WAL
-/// mode, so the Alfred helper can read it while Twinkle writes.
-///
-/// Searching matches every word of the query against the address and title,
-/// then ranks by how well and where it matched (the start of the host beats
-/// the middle of a path) and by how often and how lately the page was
-/// visited.
+/// mode, so a reader never waits on a write.
+/// Searching happens in memory: see HistoryIndex.
 public final class History {
     private var db: OpaquePointer?
 
@@ -78,27 +74,9 @@ public final class History {
         try run("DELETE FROM pages WHERE last_visit < ?1", [date.timeIntervalSince1970])
     }
 
-    /// The best `limit` matches for `text`. Empty text: the most visited
-    /// recent pages.
-    public func search(_ text: String, limit: Int = 12, now: Date = Date()) throws -> [HistoryEntry] {
-        let words = HistoryRanking.words(text)
-        var sql = "SELECT url, title, visits, last_visit FROM pages"
-        var args: [Any] = []
-        if !words.isEmpty {
-            sql += " WHERE " + words.indices.map { "(url LIKE ?\($0 + 1) ESCAPE '\\' OR title LIKE ?\($0 + 1) ESCAPE '\\')" }
-                .joined(separator: " AND ")
-            args = words.map { "%" + Self.escapeLike($0) + "%" }
-        }
-        // Enough candidates to rank; the newest win if there are too many.
-        sql += " ORDER BY last_visit DESC LIMIT 2000"
-        let rows = try query(sql, args)
-        return HistoryRanking.rank(rows, words: words, now: now).prefix(limit).map { $0 }
-    }
-
-    private static func escapeLike(_ s: String) -> String {
-        s.replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "%", with: "\\%")
-            .replacingOccurrences(of: "_", with: "\\_")
+    /// Every page, for the in-memory index (HistoryIndex).
+    public func all() throws -> [HistoryEntry] {
+        try query("SELECT url, title, visits, last_visit FROM pages ORDER BY last_visit DESC", [])
     }
 
     // MARK: SQLite
@@ -148,58 +126,5 @@ public final class History {
                                      lastVisit: Date(timeIntervalSince1970: sqlite3_column_double(statement, 3))))
         }
         return rows
-    }
-}
-
-/// How history matches are ordered. Separate from the database so it can
-/// be tested on its own.
-public enum HistoryRanking {
-    public static func words(_ text: String) -> [String] {
-        text.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
-    }
-
-    public static func rank(_ entries: [HistoryEntry], words: [String], now: Date) -> [HistoryEntry] {
-        entries.map { ($0, score($0, words: words, now: now)) }
-            .filter { $0.1 > 0 }
-            .sorted { $0.1 > $1.1 }
-            .map(\.0)
-    }
-
-    /// How often and how lately: visits count less the more there are, and
-    /// a visit a month ago counts about a quarter of one today.
-    public static func frecency(_ e: HistoryEntry, now: Date) -> Double {
-        let days = max(0, now.timeIntervalSince(e.lastVisit) / 86_400)
-        return log2(1 + Double(e.visits)) * (1 / (1 + days / 10))
-    }
-
-    public static func score(_ e: HistoryEntry, words: [String], now: Date) -> Double {
-        let base = 0.05 + frecency(e, now: now)
-        guard !words.isEmpty else { return base }
-        let url = e.url.lowercased()
-        let host = Hosts.siteKey(e.host)
-        let title = e.title.lowercased()
-        // What the address looks like typed: no scheme, no www.
-        var bare = Substring(url)
-        if let r = bare.range(of: "://") { bare = bare[r.upperBound...] }
-        if bare.hasPrefix("www.") { bare = bare.dropFirst(4) }
-
-        var match = 1.0
-        for (i, word) in words.enumerated() {
-            if i == 0 && bare.hasPrefix(word) {
-                match *= 8                         // typing the address itself
-            } else if host.contains(word) {
-                match *= host.split(separator: ".").contains { $0.hasPrefix(word) } ? 4 : 2.5
-            } else if title.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(word) }) {
-                match *= 2                         // the start of a word in the title
-            } else if url.contains(word) || title.contains(word) {
-                match *= 1
-            } else {
-                return 0
-            }
-        }
-        // Site roots first among equals: "github.com" before a deep link.
-        let path = URL(string: e.url)?.path ?? ""
-        if path.isEmpty || path == "/" { match *= 1.5 }
-        return base * match
     }
 }

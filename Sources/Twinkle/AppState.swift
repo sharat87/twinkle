@@ -169,12 +169,22 @@ final class AppState {
         do {
             let history = try History(path: files.url(Self.historyFile).path)
             try? history.forget(before: Date().addingTimeInterval(-settings.historyDays * 86_400))
+            historyIndex = HistoryIndex((try? history.all()) ?? [])
             return history
         } catch {
             Status.show("History is unavailable: \(error)", sticky: true)
             return nil
         }
     }()
+
+    /// History in memory, for the address bar. Filled when history opens.
+    private(set) var historyIndex = HistoryIndex()
+
+    /// The address bar's view of history: opens it if need be.
+    var suggestionIndex: HistoryIndex {
+        _ = history
+        return historyIndex
+    }
 
     /// Web pages only, and nothing from temporary containers.
     private func recordable(_ url: URL, _ container: UUID?) -> Bool {
@@ -184,28 +194,18 @@ final class AppState {
     func recordVisit(_ url: URL, title: String, container: UUID?) {
         guard recordable(url, container) else { return }
         try? history?.recordVisit(url: url.absoluteString, title: title)
+        historyIndex.recordVisit(url: url.absoluteString, title: title)
     }
 
     func recordTitle(_ title: String, for url: URL, container: UUID?) {
         guard recordable(url, container) else { return }
         try? history?.setTitle(title, for: url.absoluteString)
+        historyIndex.setTitle(title, for: url.absoluteString)
     }
 
     func clearHistory() {
         try? history?.forgetAll()
-    }
-
-    /// The Alfred workflow runs `bin/twinkle-query` in Twinkle's folder: a
-    /// link to the helper inside whichever copy of the app is running.
-    func linkQueryHelper() {
-        let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/twinkle-query")
-        guard FileManager.default.isExecutableFile(atPath: helper.path) else { return }
-        let bin = files.directory.appendingPathComponent("bin", isDirectory: true)
-        let link = bin.appendingPathComponent("twinkle-query")
-        if (try? FileManager.default.destinationOfSymbolicLink(atPath: link.path)) == helper.path { return }
-        try? FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-        try? FileManager.default.removeItem(at: link)
-        try? FileManager.default.createSymbolicLink(at: link, withDestinationURL: helper)
+        historyIndex.removeAll()
     }
 
     // MARK: Zoom

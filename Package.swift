@@ -13,14 +13,6 @@ let package = Package(
             path: "Sources/TwinkleCore",
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
-        // Answers the Alfred workflow: history matches and open tabs as
-        // Alfred script-filter JSON. Small and quick to start, since Alfred
-        // runs it on every keystroke.
-        .executableTarget(
-            name: "twinkle-query",
-            dependencies: ["TwinkleCore"],
-            path: "Sources/TwinkleQuery"
-        ),
         // The macOS app: AppKit windows around WKWebView.
         .executableTarget(
             name: "Twinkle",
