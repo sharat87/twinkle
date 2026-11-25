@@ -151,12 +151,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
 
-        let plus = NSButton(image: NSImage(systemSymbolName: "plus", accessibilityDescription: "New Tab")!,
-                            target: self, action: #selector(newTab(_:)))
-        plus.isBordered = false
-        plus.contentTintColor = .secondaryLabelColor
-        plus.toolTip = "New Tab (⌘T)"
-
         statusButton.isBordered = false
         statusButton.alignment = .left
         statusButton.lineBreakMode = .byTruncatingMiddle
@@ -166,7 +160,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         statusButton.action = #selector(revealStatusFile(_:))
         statusButton.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        for v in [scroll, plus, statusButton] {
+        for v in [scroll, statusButton] {
             v.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(v)
         }
@@ -174,13 +168,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             scroll.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: 4),
             scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: plus.topAnchor, constant: -6),
-            plus.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            plus.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
-            plus.widthAnchor.constraint(equalToConstant: 20),
-            statusButton.leadingAnchor.constraint(equalTo: plus.trailingAnchor, constant: 8),
+            scroll.bottomAnchor.constraint(equalTo: statusButton.topAnchor, constant: -6),
+            statusButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
             statusButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
-            statusButton.centerYAnchor.constraint(equalTo: plus.centerYAnchor),
+            statusButton.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
         ])
         return root
     }
@@ -895,6 +886,33 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
     }
 
+    /// Tools › Clear Cookies and Data for This Site: everything the current
+    /// tab's container holds for the site (cookies, storage, caches), then a
+    /// reload. For sites like AWS whose sign-in gets stuck. WebKit keeps
+    /// data per registrable domain, so signin.aws.amazon.com clears all of
+    /// amazon.com in that container; other containers are untouched.
+    @objc func clearSiteData(_ sender: Any?) {
+        guard let tab = current, let host = tab.url?.host()?.lowercased() else { return }
+        let store = AppState.shared.dataStore(for: tab.containerID)
+        let container = AppState.shared.container(tab.containerID)?.name
+        let types = WKWebsiteDataStore.allWebsiteDataTypes()
+        store.fetchDataRecords(ofTypes: types) { records in
+            let matching = records.filter {
+                let domain = $0.displayName.lowercased()
+                return host == domain || host.hasSuffix("." + domain)
+            }
+            let names = matching.map(\.displayName).sorted().joined(separator: ", ")
+            store.removeData(ofTypes: types, for: matching) { [weak tab] in
+                MainActor.assumeIsolated {
+                    let place = container.map { " in \($0)" } ?? ""
+                    Status.show(matching.isEmpty ? "Nothing stored for \(host)\(place)."
+                                                 : "Cleared cookies and data for \(names)\(place).")
+                    tab?.webView?.reload()
+                }
+            }
+        }
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         let webView = current?.webView
         switch item.action {
@@ -905,6 +923,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
              #selector(reloadFromOrigin(_:)), #selector(findNext(_:)), #selector(findPrevious(_:)), #selector(showFind(_:)):
             return webView != nil
         case #selector(copyAddress(_:)): return current?.url != nil
+        case #selector(clearSiteData(_:)):
+            let host = current?.url?.host().map(Hosts.siteKey)
+            item.title = host.map { "Clear Cookies and Data for \($0)" } ?? "Clear Cookies and Data for This Site"
+            return host != nil
         case #selector(reopenClosedTab(_:)): return !closedTabs.isEmpty
         case #selector(reopenInContainer(_:)):
             item.state = ContainerMenus.isCurrent(item, current?.containerID) ? .on : .off

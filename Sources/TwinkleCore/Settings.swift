@@ -23,6 +23,10 @@ public struct Settings: Codable, Equatable, Sendable {
     public var unloadTabsAfterMinutes: Double
     /// How long history is kept. 0 keeps no history at all.
     public var historyDays: Double
+    /// The monospace font: what pages asking for `monospace` get, and what
+    /// plain text and JSON are shown in. Size in CSS pixels.
+    public var monospaceFont: String
+    public var monospaceFontSize: Double
 
     public static let defaultFilterLists = [
         "https://easylist.to/easylist/easylist.txt",
@@ -31,7 +35,7 @@ public struct Settings: Codable, Equatable, Sendable {
 
     public init() {
         searchURL = "https://duckduckgo.com/?q=%s"
-        windowTitleFormat = "{title} - {host}"
+        windowTitleFormat = "{title} ({host})"
         downloadsDirectory = "~/Downloads"
         adBlocking = true
         adBlockingOffFor = []
@@ -39,12 +43,14 @@ public struct Settings: Codable, Equatable, Sendable {
         filterListRefreshDays = 4
         unloadTabsAfterMinutes = 30
         historyDays = 180
+        monospaceFont = "Monaco"
+        monospaceFontSize = 18
     }
 
     enum CodingKeys: String, CodingKey {
         case searchURL, windowTitleFormat, downloadsDirectory, adBlocking,
              adBlockingOffFor, filterLists, filterListRefreshDays, unloadTabsAfterMinutes,
-             historyDays
+             historyDays, monospaceFont, monospaceFontSize
     }
 
     public init(from decoder: Decoder) throws {
@@ -59,6 +65,8 @@ public struct Settings: Codable, Equatable, Sendable {
         filterListRefreshDays = try c.decodeIfPresent(Double.self, forKey: .filterListRefreshDays) ?? d.filterListRefreshDays
         unloadTabsAfterMinutes = try c.decodeIfPresent(Double.self, forKey: .unloadTabsAfterMinutes) ?? d.unloadTabsAfterMinutes
         historyDays = try c.decodeIfPresent(Double.self, forKey: .historyDays) ?? d.historyDays
+        monospaceFont = try c.decodeIfPresent(String.self, forKey: .monospaceFont) ?? d.monospaceFont
+        monospaceFontSize = try c.decodeIfPresent(Double.self, forKey: .monospaceFontSize) ?? d.monospaceFontSize
     }
 
     /// Whether the blocker should run on pages from `host`.

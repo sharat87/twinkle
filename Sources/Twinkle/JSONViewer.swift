@@ -53,13 +53,13 @@ enum JSONViewer {
       const style = document.createElement('style');
       style.textContent = `
         :root { color-scheme: light dark; }
-        body { margin: 0; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+        body { margin: 0; }
         .tw-bar { position: sticky; top: 0; display: flex; gap: 4px; justify-content: flex-end;
                   padding: 8px 12px; background: Canvas; font: 12px -apple-system, system-ui; }
         .tw-bar button { font: inherit; border: 0; border-radius: 6px; padding: 3px 10px;
                          background: transparent; color: GrayText; cursor: pointer; }
         .tw-bar button.on { background: color-mix(in srgb, CanvasText 10%, transparent); color: CanvasText; }
-        pre { margin: 0; padding: 4px 16px 24px; white-space: pre-wrap; overflow-wrap: anywhere; }
+        pre { margin: 0; padding: 4px 16px 24px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
         .k { color: #8250df } .s { color: #0a7f3f } .n { color: #0550ae }
         .b { color: #b35900 } .z { color: #8c959f } .p { color: #8c959f }
         @media (prefers-color-scheme: dark) {

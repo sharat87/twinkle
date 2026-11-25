@@ -46,7 +46,7 @@ The Twinkle menu opens each of these. WebKit keeps each container's site data un
 ```json
 {
   "searchURL": "https://duckduckgo.com/?q=%s",
-  "windowTitleFormat": "{title} - {host}",
+  "windowTitleFormat": "{title} ({host})",
   "downloadsDirectory": "~/Downloads",
   "adBlocking": true,
   "adBlockingOffFor": ["example.com"],
@@ -56,11 +56,13 @@ The Twinkle menu opens each of these. WebKit keeps each container's site data un
   ],
   "filterListRefreshDays": 4,
   "unloadTabsAfterMinutes": 30,
-  "historyDays": 180
+  "historyDays": 180,
+  "monospaceFont": "Monaco",
+  "monospaceFontSize": 18
 }
 ```
 
-`unloadTabsAfterMinutes: 0` keeps every tab loaded. `historyDays: 0` keeps no history.
+`unloadTabsAfterMinutes: 0` keeps every tab loaded. `historyDays: 0` keeps no history. `monospaceFont` and `monospaceFontSize` (CSS pixels) are what pages asking for `monospace` get, and what plain text and JSON are shown in; they apply to tabs opened after the change. The window title ends in ` (host)` so KeePassXC auto-type can match on it.
 
 ### Importing from Safari
 
@@ -102,6 +104,7 @@ A site covers its subdomains, and the most specific entry wins: here `mail.examp
 | `⌘T` new tab (same container) · `⌃⌘0` new tab, no container · `⌃⌘1`–`9` new tab in container · `⌥⌘T` new temporary container | `⌘W` close · `⇧⌘T` reopen closed tab |
 | `⌘L` address · `⌘F` find · `⌘G` / `⇧⌘G` next / previous | `⌘[` / `⌘]` back / forward · `⌘R` reload · `⌥⌘R` reload from origin |
 | `⌃Tab` / `⌃⇧Tab`, `⇧⌘]` / `⇧⌘[` next / previous tab · `⌘1`–`⌘9` jump | `⌘+` (or `⌘=`) / `⌘-` / `⌘0` zoom, remembered per site · `⌃⌘S` tab list · `⇧⌘N` new container |
+| `⌥⇧⌘⌫` clear cookies and data for this site (Tools menu): everything the tab's container holds for the site, then a reload. For sign-ins that get stuck, like AWS. | |
 
 ⌘-click or middle-click a link to open it in a background tab in the same container; add ⇧ to switch to it. Middle-click a tab to close it. Right-click a tab to reopen it in another container (or a new temporary one), or to unload it now. Right-click a page › Inspect Element opens Safari's Web Inspector.
 

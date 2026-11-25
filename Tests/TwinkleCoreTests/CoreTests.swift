@@ -39,12 +39,12 @@ let ddg = "https://duckduckgo.com/?q=%s"
 
     @Test func titleAndHost() {
         let title = WindowTitle.make(title: "Sign in", url: URL(string: "https://accounts.example.com/login"), format: format)
-        #expect(title == "Sign in - accounts.example.com")
+        #expect(title == "Sign in (accounts.example.com)")
     }
 
     @Test func noPageTitleUsesHost() {
         let title = WindowTitle.make(title: " ", url: URL(string: "https://example.com"), format: format)
-        #expect(title == "example.com - example.com")
+        #expect(title == "example.com (example.com)")
     }
 
     @Test func blankTab() {

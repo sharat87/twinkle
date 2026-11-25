@@ -88,6 +88,8 @@ enum MainMenu {
             reopen,
             assign,
             .separator(),
+            item("Clear Cookies and Data for This Site", #selector(BrowserWindowController.clearSiteData(_:)), "\u{8}", [.command, .option, .shift]),
+            .separator(),
             item("Turn Off Ad Blocking for This Site", #selector(BrowserWindowController.toggleBlockingForSite(_:))),
             item("Reload Filter Lists", #selector(AppDelegate.reloadFilterLists(_:)), target: app),
             item("Download Filter Lists Now", #selector(AppDelegate.downloadFilterLists(_:)), target: app),

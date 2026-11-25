@@ -227,6 +227,8 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
             config.applicationNameForUserAgent = UserAgent.suffix
             config.preferences.isElementFullscreenEnabled = true
             config.preferences.javaScriptCanOpenWindowsAutomatically = false
+            let settings = AppState.shared.settings
+            config.preferences.setMonospaceFont(settings.monospaceFont, size: settings.monospaceFontSize)
         }
         Blocker.shared.register(config.userContentController)
         JSONViewer.install(config.userContentController)
@@ -499,5 +501,31 @@ enum ErrorPage {
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "\"", with: "&quot;")
+    }
+}
+
+extension WKPreferences {
+    /// The font for `monospace`, which plain text and the JSON viewer use.
+    /// WebKit only has this as a private setting (Safari's own preferences
+    /// use it); if it's ever gone, pages keep WebKit's default.
+    func setMonospaceFont(_ family: String, size: Double) {
+        let familySetter = NSSelectorFromString("_setFixedPitchFontFamily:")
+        if responds(to: familySetter) { perform(familySetter, with: family) }
+        let sizeSetter = NSSelectorFromString("_setDefaultFixedPitchFontSize:")
+        guard let method = class_getInstanceMethod(WKPreferences.self, sizeSetter),
+              let encoding = method_getTypeEncoding(method) else { return }
+        // The argument's type, from an encoding like "v24@0:8d16".
+        let argument = String(cString: encoding).filter { !$0.isNumber }.dropFirst(3).first
+        let imp = method_getImplementation(method)
+        switch argument {
+        case "d":
+            typealias Setter = @convention(c) (AnyObject, Selector, Double) -> Void
+            unsafeBitCast(imp, to: Setter.self)(self, sizeSetter, size)
+        case "Q", "q", "L", "l", "I", "i":
+            typealias Setter = @convention(c) (AnyObject, Selector, Int) -> Void
+            unsafeBitCast(imp, to: Setter.self)(self, sizeSetter, Int(size))
+        default:
+            return
+        }
     }
 }

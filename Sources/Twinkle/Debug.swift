@@ -47,6 +47,17 @@ enum Debug {
             let key = note.object as? String ?? ""
             MainActor.assumeIsolated { controller()?.debugKey(key) }
         }
+        // `./debug.sh action <selector>`: a menu command, e.g. clearSiteData:
+        DistributedNotificationCenter.default().addObserver(forName: .init("dev.twinkle.debug.action"), object: nil, queue: .main) { note in
+            let name = note.object as? String ?? ""
+            MainActor.assumeIsolated {
+                // To the window directly: with Twinkle in the background
+                // there's no key window for a nil-targeted action to reach.
+                let selector = NSSelectorFromString(name)
+                let target: AnyObject? = controller().flatMap { $0.responds(to: selector) ? $0 : nil } ?? NSApp.delegate
+                _ = NSApp.sendAction(selector, to: target, from: nil)
+            }
+        }
         // `./debug.sh select <index>`
         DistributedNotificationCenter.default().addObserver(forName: selectNotification, object: nil, queue: .main) { note in
             let index = Int(note.object as? String ?? "") ?? -1
