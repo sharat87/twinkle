@@ -9,9 +9,37 @@
 //   twinkle://open?input=<text>            in the current tab
 //   twinkle://open?input=<text>&tab=new    in a new tab (⌘↩)
 //   twinkle://switch?tab=<id>              bring an open tab to the front
+//
+// With TWINKLE_SELECT_ALL=1 it instead waits for Alfred's window and presses
+// ⌘A, so the address Alfred opens with is selected. Alfred runs it, so the key
+// press uses Alfred's Accessibility access, not Twinkle's.
+import CoreGraphics
 import CryptoKit
 import Foundation
 import TwinkleCore
+
+if ProcessInfo.processInfo.environment["TWINKLE_SELECT_ALL"] == "1" {
+    selectAllInAlfred()
+    exit(0)
+}
+
+func selectAllInAlfred() {
+    // Up to a second for the window to appear: owner and bounds need no
+    // permission, unlike window titles.
+    func alfredShowing() -> Bool {
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+        return windows.contains { ($0[kCGWindowOwnerName as String] as? String)?.hasPrefix("Alfred") == true
+            && ($0[kCGWindowLayer as String] as? Int ?? 0) > 0 }
+    }
+    for _ in 0..<50 where !alfredShowing() { usleep(20_000) }
+    usleep(30_000)
+    let source = CGEventSource(stateID: .hidSystemState)
+    for down in [true, false] {
+        let key = CGEvent(keyboardEventSource: source, virtualKey: 0x00, keyDown: down)   // A
+        key?.flags = .maskCommand
+        key?.post(tap: .cghidEventTap)
+    }
+}
 
 let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     .appendingPathComponent("Twinkle", isDirectory: true)
