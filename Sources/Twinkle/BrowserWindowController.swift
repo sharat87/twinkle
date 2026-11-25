@@ -8,7 +8,7 @@ extension NSPasteboard.PasteboardType {
 
 /// Twinkle's one text size, used for every piece of its own UI.
 enum UI {
-    static let textSize: CGFloat = 16
+    static let textSize: CGFloat = 18
     static let font = NSFont.systemFont(ofSize: textSize)
 }
 
@@ -218,7 +218,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         addressBox.boxType = .custom
         addressBox.borderWidth = 0
         addressBox.cornerRadius = 8
-        addressBox.fillColor = .quaternarySystemFill
+        addressBox.fillColor = .clear
         addressBox.contentViewMargins = .zero
         addressBox.titlePosition = .noTitle
         addressBox.contentView?.addSubview(row)
