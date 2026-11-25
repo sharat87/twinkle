@@ -147,3 +147,7 @@ The content-blocker JSON that `FilterConverter` produces is WebKit's format, whi
 ### Looking inside a running Twinkle
 
 `./debug.sh` asks the running app to write `state.json` (tabs, titles, URLs, loading state), `text.json` (each loaded tab's text), `window.png` and `page.png` to `~/Library/Application Support/Twinkle/debug/`, then prints the state (with `TWINKLE_PROFILE=<folder>`, the `--profile` Twinkle and `<folder>/debug/`). `./debug.sh open <url> [container]` opens a tab (`temporary` for a new temporary container) and `./debug.sh select <index>` brings one to the front. This works without Screen Recording permission. The page snapshot needs the window to be visible on screen.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
