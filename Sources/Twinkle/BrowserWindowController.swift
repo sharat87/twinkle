@@ -31,6 +31,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     private var tabListItem: NSSplitViewItem!
     private let table = TabTableView()
     private let statusButton = NSButton(title: "", target: nil, action: nil)
+    private let statusIcon = NSImageView()
+    private let statusCancel = NSButton()
     private let addressField = NSTextField()
     private let badge = NSTextField(labelWithString: "")
     private let badgeBox = NSView()
@@ -45,6 +47,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     private lazy var suggestions = makeSuggestions()
 
     private var statusFile: URL?
+    private var statusCancelAction: (() -> Void)?
     private var statusTimer: Timer?
     private var saveTimer: Timer?
     private var keyMonitor: Any?
@@ -162,7 +165,19 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         statusButton.action = #selector(revealStatusFile(_:))
         statusButton.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        for v in [scroll, statusButton] {
+        statusIcon.imageScaling = .scaleProportionallyDown
+        statusIcon.isHidden = true
+        statusIcon.contentTintColor = .secondaryLabelColor
+        statusCancel.bezelStyle = .accessoryBar
+        statusCancel.isBordered = false
+        statusCancel.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Cancel download")
+        statusCancel.contentTintColor = .secondaryLabelColor
+        statusCancel.target = self
+        statusCancel.action = #selector(cancelStatusAction(_:))
+        statusCancel.toolTip = "Cancel download"
+        statusCancel.isHidden = true
+
+        for v in [scroll, statusIcon, statusButton, statusCancel] {
             v.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(v)
         }
@@ -171,9 +186,17 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             scroll.bottomAnchor.constraint(equalTo: statusButton.topAnchor, constant: -6),
-            statusButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            statusButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
+            statusIcon.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+            statusIcon.centerYAnchor.constraint(equalTo: statusButton.centerYAnchor),
+            statusIcon.widthAnchor.constraint(equalToConstant: 18),
+            statusIcon.heightAnchor.constraint(equalToConstant: 18),
+            statusButton.leadingAnchor.constraint(equalTo: statusIcon.trailingAnchor, constant: 6),
+            statusButton.trailingAnchor.constraint(equalTo: statusCancel.leadingAnchor, constant: -6),
             statusButton.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
+            statusCancel.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
+            statusCancel.centerYAnchor.constraint(equalTo: statusButton.centerYAnchor),
+            statusCancel.widthAnchor.constraint(equalToConstant: 22),
+            statusCancel.heightAnchor.constraint(equalToConstant: 22),
         ])
         return root
     }
@@ -630,7 +653,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     // MARK: Address field
 
     private func makeSuggestions() -> AddressSuggestions {
-        let s = AddressSuggestions(field: addressField, anchor: addressBox)
+        let s = AddressSuggestions(field: addressField, anchor: addressField)
         s.tabs = { [unowned self] in tabs }
         s.current = { [unowned self] in current }
         s.open = { [unowned self] url, newTab in
@@ -1086,22 +1109,43 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         statusButton.title = text
         statusButton.toolTip = text
         statusFile = info["file"] as? URL
+        if let symbol = info["symbol"] as? String {
+            statusIcon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        } else {
+            statusIcon.image = nil
+        }
+        statusIcon.isHidden = statusIcon.image == nil
+        statusCancelAction = info["cancel"] as? () -> Void
+        statusCancel.isHidden = statusCancelAction == nil
         statusTimer?.invalidate()
         if !(info["sticky"] as? Bool ?? false) {
             statusTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated {
-                    self?.statusButton.title = ""
-                    self?.statusFile = nil
+                    self?.clearStatus()
                 }
             }
         }
+    }
+
+    private func clearStatus() {
+        statusButton.title = ""
+        statusButton.toolTip = nil
+        statusFile = nil
+        statusIcon.image = nil
+        statusIcon.isHidden = true
+        statusCancelAction = nil
+        statusCancel.isHidden = true
     }
 
     @objc private func revealStatusFile(_ sender: Any?) {
         if let file = statusFile {
             NSWorkspace.shared.activateFileViewerSelecting([file])
         }
-        statusButton.title = ""
+        clearStatus()
+    }
+
+    @objc private func cancelStatusAction(_ sender: Any?) {
+        statusCancelAction?()
     }
 
     // MARK: Session

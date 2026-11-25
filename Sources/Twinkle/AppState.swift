@@ -387,10 +387,13 @@ final class AppState {
 /// A line of text at the bottom of the sidebar: downloads, errors, updates.
 @MainActor
 enum Status {
-    static func show(_ text: String, file: URL? = nil, sticky: Bool = false) {
+    static func show(_ text: String, file: URL? = nil, symbol: String? = nil,
+                     cancel: (() -> Void)? = nil, sticky: Bool = false) {
         NSLog("Twinkle: %@", text)
         var info: [String: Any] = ["text": text, "sticky": sticky]
         if let file { info["file"] = file }
+        if let symbol { info["symbol"] = symbol }
+        if let cancel { info["cancel"] = cancel }
         NotificationCenter.default.post(name: .status, object: nil, userInfo: info)
     }
 }

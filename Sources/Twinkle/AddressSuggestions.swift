@@ -39,6 +39,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
 
     static let rowHeight: CGFloat = 38
     static let maxRows = 9
+    static let maxWidth: CGFloat = 960
 
     init(field: NSTextField, anchor: NSView) {
         self.field = field
@@ -330,10 +331,11 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         guard let window = anchor.window else { return }
         let box = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
         let full = CGFloat(Self.maxRows) * Self.rowHeight + 10
-        let frame = NSRect(x: box.minX, y: box.minY - 6 - full, width: box.width, height: full)
+        let width = min(box.width, Self.maxWidth)
+        let frame = NSRect(x: box.minX, y: box.minY - 6 - full, width: width, height: full)
         if panel.frame != frame { panel.setFrame(frame, display: false) }
         let height = CGFloat(min(count, Self.maxRows)) * Self.rowHeight + 10
-        let inner = NSRect(x: 0, y: full - height, width: box.width, height: height)
+        let inner = NSRect(x: 0, y: full - height, width: width, height: height)
         if background.frame != inner {
             background.frame = inner
             panel.invalidateShadow()

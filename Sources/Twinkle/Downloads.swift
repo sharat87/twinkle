@@ -7,25 +7,31 @@ import WebKit
 final class Downloads: NSObject, WKDownloadDelegate {
     static let shared = Downloads()
 
+    private var downloads: [ObjectIdentifier: WKDownload] = [:]
     private var destinations: [ObjectIdentifier: URL] = [:]
+    private var expectedBytes: [ObjectIdentifier: Int64] = [:]
     private var observations: [ObjectIdentifier: NSKeyValueObservation] = [:]
     private var lastPercent: [ObjectIdentifier: Int] = [:]
 
     func track(_ download: WKDownload) {
         download.delegate = self
         let id = ObjectIdentifier(download)
+        downloads[id] = download
         observations[id] = download.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
             let fraction = progress.fractionCompleted
-            DispatchQueue.main.async { self?.progressed(id, fraction) }
+            let completed = progress.completedUnitCount
+            let total = progress.totalUnitCount
+            DispatchQueue.main.async { self?.progressed(id, fraction, completed: completed, total: total) }
         }
     }
 
-    private func progressed(_ id: ObjectIdentifier, _ fraction: Double) {
+    private func progressed(_ id: ObjectIdentifier, _ fraction: Double, completed: Int64, total: Int64) {
         guard let file = destinations[id] else { return }
         let percent = Int(fraction * 100)
         guard percent != lastPercent[id], percent < 100 else { return }
         lastPercent[id] = percent
-        Status.show("Downloading \(file.lastPathComponent)… \(percent)%", file: file, sticky: true)
+        let knownTotal = total > 0 ? total : expectedBytes[id] ?? 0
+        showProgress(id: id, file: file, completed: completed, total: knownTotal, percent: percent)
     }
 
     func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,
@@ -33,8 +39,10 @@ final class Downloads: NSObject, WKDownloadDelegate {
         let directory = AppState.shared.downloadsDirectory
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let file = Self.unique(directory.appendingPathComponent(Self.clean(suggestedFilename)))
-        destinations[ObjectIdentifier(download)] = file
-        Status.show("Downloading \(file.lastPathComponent)…", file: file, sticky: true)
+        let id = ObjectIdentifier(download)
+        destinations[id] = file
+        if response.expectedContentLength > 0 { expectedBytes[id] = response.expectedContentLength }
+        showProgress(id: id, file: file, completed: 0, total: expectedBytes[id] ?? 0, percent: 0)
         completionHandler(file)
     }
 
@@ -52,16 +60,43 @@ final class Downloads: NSObject, WKDownloadDelegate {
 
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
         let id = ObjectIdentifier(download)
-        let name = destinations[id]?.lastPathComponent ?? "download"
+        guard let file = destinations[id] else { return }
+        let name = file.lastPathComponent
         Status.show("\(name) failed: \(error.localizedDescription)", sticky: true)
-        if let file = destinations[id] { try? FileManager.default.removeItem(at: file) }
+        try? FileManager.default.removeItem(at: file)
         forget(id)
     }
 
     private func forget(_ id: ObjectIdentifier) {
+        downloads[id] = nil
         destinations[id] = nil
+        expectedBytes[id] = nil
         observations[id] = nil
         lastPercent[id] = nil
+    }
+
+    private func showProgress(id: ObjectIdentifier, file: URL, completed: Int64, total: Int64, percent: Int) {
+        let bytes: String
+        if total > 0 {
+            let received = ByteCountFormatter.string(fromByteCount: max(0, completed), countStyle: .file)
+            let size = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
+            bytes = "\(received) of \(size) · \(percent)%"
+        } else if completed > 0 {
+            bytes = "\(ByteCountFormatter.string(fromByteCount: completed, countStyle: .file)) · \(percent)%"
+        } else {
+            bytes = "0 bytes"
+        }
+        Status.show("\(file.lastPathComponent)… \(bytes)", file: file, symbol: "arrow.down.circle",
+                    cancel: { [weak self] in self?.cancel(id) }, sticky: true)
+    }
+
+    private func cancel(_ id: ObjectIdentifier) {
+        guard let download = downloads[id], let file = destinations[id] else { return }
+        Status.show("Canceled \(file.lastPathComponent)", file: file)
+        download.cancel { _ in
+            try? FileManager.default.removeItem(at: file)
+        }
+        forget(id)
     }
 
     static func clean(_ name: String) -> String {
