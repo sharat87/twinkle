@@ -12,9 +12,26 @@ if [[ "${3:-}" == "--profile" ]]; then
   profile="$(cd "$4" && pwd -P)"
 fi
 
-# The running Twinkles for this profile (none: the usual one).
+# Signed with this Mac's own identity and sandboxed. No ad-hoc fallback: an
+# unsigned or ad-hoc Twinkle would leave its cookies readable by any app.
+identity="Twinkle Local Signing"
+if ! security find-identity -p codesigning | grep -q "\"$identity\""; then
+  echo "No \"$identity\" identity in your keychain. Run scripts/make-signing-identity.sh once, then build again." >&2
+  exit 1
+fi
+
+# The running Twinkles for this profile (none: the usual one), found by the
+# instance.lock each one holds open. A restarted Twinkle has no --profile
+# argument, so arguments only tell old builds, which hold no lock, apart.
+lock_dir="${profile:-$HOME/Library/Containers/dev.twinkle.Twinkle/Data/Library/Application Support/Twinkle}"
 instances() {
+  local locked
+  locked="$(lsof -a -c Twinkle -Fpn 2>/dev/null | awk -v want="$lock_dir/instance.lock" '
+    /^p/ { pid = substr($0, 2) } /^n/ { if (substr($0, 2) == want) print pid; if ($0 ~ /\/instance\.lock$/) any[pid] = 1 }
+    END { for (p in any) print "any " p }')"
   for pid in $(pgrep -x Twinkle); do
+    if grep -qx "$pid" <<<"$locked"; then echo "$pid"; continue; fi
+    grep -qx "any $pid" <<<"$locked" && continue
     args="$(ps -o args= -p "$pid" || true)"
     if [[ -n "$profile" ]]; then
       [[ "$args " == *"--profile $profile "* ]] && echo "$pid"
@@ -43,8 +60,8 @@ cp Resources/Info.plist "$app/Contents/Info.plist"
 icon=.build/AppIcon.icns
 [[ -f "$icon" && "$icon" -nt scripts/make-icon.swift ]] || swift scripts/make-icon.swift "$icon"
 cp "$icon" "$app/Contents/Resources/AppIcon.icns"
-# Ad-hoc signature: enough to run locally.
-codesign --force --sign - "$app" >/dev/null
+# Sandboxed, signed with the identity checked above.
+codesign --force --options runtime --entitlements Resources/Twinkle.entitlements --sign "$identity" "$app" >/dev/null
 echo "Built $app"
 
 if [[ "${2:-}" == "run" ]]; then

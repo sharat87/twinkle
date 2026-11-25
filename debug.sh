@@ -9,12 +9,15 @@
 #   ./debug.sh action <selector:>        run a menu command
 #   ./debug.sh mouse <button>           click a mouse button mid-window (3 back, 4 forward)
 #   ./debug.sh appearance <light|dark|system>   for screenshots of both
-# Writes state.json, window.png, page.png to ~/Library/Application Support/Twinkle/debug/.
+# Writes state.json, window.png, page.png to Twinkle's folder in its sandbox
+# container (~/Library/Containers/dev.twinkle.Twinkle/…/Twinkle/debug/).
 # TWINKLE_PROFILE=<folder> ./debug.sh … drives the Twinkle started with
 # `./build.sh release run --profile <folder>` instead, and its files are in <folder>/debug/.
 set -euo pipefail
 cd "$(dirname "$0")"
-dir="$HOME/Library/Application Support/Twinkle/debug"
+# The usual Twinkle is sandboxed: its dumps are in its container, which
+# macOS keeps from other apps (debug.sh included) unless you allow it.
+dir="$HOME/Library/Containers/dev.twinkle.Twinkle/Data/Library/Application Support/Twinkle/debug"
 suffix=""
 if [[ -n "${TWINKLE_PROFILE:-}" ]]; then
   profile="$(cd "$TWINKLE_PROFILE" && pwd -P)"

@@ -42,7 +42,7 @@ final class AppState {
     private init() {
         do {
             if let path = Self.profileArgument() {
-                let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath).standardizedFileURL
+                let url = URL(fileURLWithPath: Home.expand(path)).standardizedFileURL
                 files = try FileStore(directory: url)
                 profile = Self.realPath(url.path)
                 profileID = Self.loadProfileID(files)
@@ -54,11 +54,30 @@ final class AppState {
         } catch {
             fatalError("Can't create Twinkle's folder: \(error)")
         }
+        Self.lockOrExit(files.url(Self.lockFile))
         reload()
     }
 
+    /// Held, never written, for as long as Twinkle runs: two copies on the
+    /// same data would overwrite each other's session and history. build.sh
+    /// also finds a profile's copy by it (lsof), since a restarted one has no
+    /// `--profile` argument to go by.
+    static let lockFile = "instance.lock"
+
+    private static func lockOrExit(_ url: URL) {
+        let fd = open(url.path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        guard fd >= 0, flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            let alert = NSAlert()
+            alert.messageText = "Twinkle is already running"
+            alert.informativeText = "Another copy is using \(url.deletingLastPathComponent().path)."
+            alert.runModal()
+            exit(1)
+        }
+    }
+
     /// `--profile <folder>` or `--profile=<folder>`.
-    private static func profileArgument() -> String? {
+    static func profileArgument() -> String? {
+        if let handoff = Relaunch.handoff { return handoff }
         let args = CommandLine.arguments
         for (i, arg) in args.enumerated() {
             if arg == "--profile", i + 1 < args.count { return args[i + 1] }
@@ -123,6 +142,7 @@ final class AppState {
             containersDate = cDate
             do {
                 let loaded = try files.load(ContainerList.self, from: Self.containersFile)?.containers ?? []
+                containersLoaded = true
                 if loaded != containers {
                     containers = loaded
                     NotificationCenter.default.post(name: .containersChanged, object: nil)
@@ -145,6 +165,23 @@ final class AppState {
     }
 
     // MARK: Containers
+
+    /// containers.json was read without an error at least once.
+    private var containersLoaded = false
+
+    /// Deletes the WebKit data stores (cookies, storage, cache) of containers
+    /// no longer in containers.json, and of old test profiles. Only the usual
+    /// Twinkle does this, at launch, and only once containers.json has been
+    /// read cleanly, so a broken file never costs a container its cookies.
+    func removeOrphanedStores() async {
+        guard profile == nil, containersLoaded else { return }
+        let keep = Set(containers.map(\.id))
+        var removed = 0
+        for id in await WKWebsiteDataStore.allDataStoreIdentifiers where !keep.contains(id) {
+            if (try? await WKWebsiteDataStore.remove(forIdentifier: id)) != nil { removed += 1 }
+        }
+        if removed > 0 { Status.show("Removed the cookies and site data of \(removed) deleted container\(removed == 1 ? "" : "s").") }
+    }
 
     func container(_ id: UUID?) -> Container? {
         guard let id else { return nil }
@@ -366,7 +403,7 @@ final class AppState {
     }
 
     var downloadsDirectory: URL {
-        let path = (settings.downloadsDirectory as NSString).expandingTildeInPath
+        let path = Home.expand(settings.downloadsDirectory)
         return URL(fileURLWithPath: path, isDirectory: true)
     }
 

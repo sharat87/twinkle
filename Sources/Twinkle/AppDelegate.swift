@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = AppState.shared
+        Task { await AppState.shared.removeOrphanedStores() }
         Blocker.shared.start()
         NSApp.mainMenu = MainMenu.build(app: self)
         NotificationCenter.default.addObserver(forName: .containersChanged, object: nil, queue: .main) { _ in
@@ -18,11 +19,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = BrowserWindowController()
         self.controller = controller
         Debug.install { [weak self] in self?.controller }
-        controller.restoreSession()
-        for url in pendingURLs { controller.open(url) }
-        pendingURLs = []
-        controller.showWindow(nil)
-        NSApp.activate()
+        // Cookies moved from an unsandboxed Twinkle go in before any page loads.
+        Task {
+            await Migration.importDefaultCookies()
+            controller.restoreSession()
+            for url in pendingURLs { controller.open(url) }
+            pendingURLs = []
+            controller.showWindow(nil)
+            NSApp.activate()
+        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -58,14 +63,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         restarting = false
     }
 
+    /// Opens a new instance, which takes over from this one once it's gone
+    /// (see `Relaunch`).
     private func relaunch() {
-        var args = ["-c", #"while kill -0 "$0" 2>/dev/null; do sleep 0.1; done; exec /usr/bin/open -n "$@""#,
-                    String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundlePath]
-        if let profile = AppState.shared.profile { args += ["--args", "--profile", profile] }
-        let helper = Process()
-        helper.executableURL = URL(fileURLWithPath: "/bin/sh")
-        helper.arguments = args
-        try? helper.run()
+        Relaunch.prepare(profile: AppState.shared.profile)
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        let done = DispatchSemaphore(value: 0)
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, _ in done.signal() }
+        _ = done.wait(timeout: .now() + 5)
     }
 
     // MARK: Menu actions

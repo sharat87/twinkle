@@ -104,7 +104,7 @@ enum SafariImporter {
         return "Cookies: \(total)" + (breakdown.isEmpty ? "" : " (\(breakdown))") + (skipped > 0 ? "; \(skipped) expired or invalid skipped." : ".")
     }
 
-    private static func httpCookie(_ c: Safari.Cookie) -> HTTPCookie? {
+    static func httpCookie(_ c: Safari.Cookie) -> HTTPCookie? {
         var properties: [HTTPCookiePropertyKey: Any] = [
             .domain: c.domain,
             .path: c.path.isEmpty ? "/" : c.path,

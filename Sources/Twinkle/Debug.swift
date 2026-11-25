@@ -188,6 +188,24 @@ extension BrowserWindowController {
             },
             "blockerLists": Blocker.shared.lists.compactMap(\.identifier),
             "address": debugAddress(),
+            "containerLibrary": Self.containerLibrary(),
         ]
+    }
+
+    /// File names (not contents) under the sandbox container's Library, a
+    /// few levels deep: where WebKit keeps cookies and site data, which
+    /// other apps, debug.sh included, can't look at.
+    static func containerLibrary() -> [String] {
+        let library = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library")
+        var paths: [String] = []
+        for dir in ["WebKit", "HTTPStorages", "Cookies", "Caches", "Application Support"] {
+            let root = library.appendingPathComponent(dir)
+            guard let walker = FileManager.default.enumerator(atPath: root.path) else { continue }
+            while let path = walker.nextObject() as? String {
+                if walker.level > 4 { walker.skipDescendants(); continue }
+                paths.append(dir + "/" + path)
+            }
+        }
+        return paths.sorted()
     }
 }

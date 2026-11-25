@@ -4,7 +4,7 @@ import SQLite3
 /// Reading Safari's history, bookmarks and cookies, for a one-off import.
 /// macOS keeps these files behind Full Disk Access.
 public enum Safari {
-    public static var home: URL { FileManager.default.homeDirectoryForCurrentUser }
+    public static var home: URL { Home.url }
     public static var historyFile: URL { home.appendingPathComponent("Library/Safari/History.db") }
     public static var bookmarksFile: URL { home.appendingPathComponent("Library/Safari/Bookmarks.plist") }
     public static var cookieFiles: [URL] {

@@ -31,6 +31,14 @@ A minimal web browser for macOS, built on the system's WebKit. Vibed just for my
 
 Needs macOS 14+ and Swift 6 (the Command Line Tools are enough; Xcode isn't needed).
 
+Twinkle runs in the App Sandbox, signed with a code signing identity of your own, so macOS keeps its cookies, site data and history from other apps (they'd otherwise be plain files any script could read). Make the identity once per Mac:
+
+```sh
+scripts/make-signing-identity.sh   # "Twinkle Local Signing", in your login keychain
+```
+
+The first build then asks for your login password so `codesign` can use it; choose Always Allow. The private key stays in your keychain; never copy or commit it. Without the identity `./build.sh` won't build, and an unsandboxed or ad-hoc signed Twinkle won't start.
+
 ```sh
 ./build.sh            # release build → build/Twinkle.app
 ./build.sh debug run  # debug build, then (re)launch it
@@ -39,11 +47,11 @@ Needs macOS 14+ and Swift 6 (the Command Line Tools are enough; Xcode isn't need
 
 Twinkle › Restart Twinkle quits and opens the app again, so a rebuild with `./build.sh` takes effect when you're ready.
 
-`--profile <folder>` runs a separate Twinkle that keeps everything in that folder, with its own cookies and filter lists, for testing without touching your own: `./build.sh release run --profile <folder>`.
+`--profile <folder>` runs a separate Twinkle that keeps everything in that folder, with its own cookies and filter lists, for testing without touching your own: `./build.sh release run --profile <folder>`. The sandbox only allows profile folders under `/tmp`.
 
 ## Files
 
-Everything lives in `~/Library/Application Support/Twinkle/`:
+Everything lives in Twinkle's sandbox container, in `~/Library/Containers/dev.twinkle.Twinkle/Data/Library/Application Support/Twinkle/`. The first time another app (your text editor, say) opens one of these, macOS asks whether it may access Twinkle's data. An unsandboxed Twinkle's files, from `~/Library/Application Support/Twinkle/` and `~/Library/WebKit/dev.twinkle.Twinkle/`, are moved in at the first sandboxed launch.
 
 | File | What |
 |---|---|
@@ -57,7 +65,9 @@ Everything lives in `~/Library/Application Support/Twinkle/`:
 | `history.sqlite` | Pages visited (address, title, visits, last visit), kept `historyDays`. Not written for temporary containers. History › Clear History empties it. |
 | `favicons/` | Site icons for the tab list, one small PNG per host. Not written for temporary containers. |
 
-The Twinkle menu opens each of these. WebKit keeps each container's site data under `~/Library/WebKit/dev.twinkle.Twinkle/`.
+The Twinkle menu opens each of these. WebKit keeps each container's site data in the container's `Library/WebKit/`. When a container is gone from `containers.json`, its cookies and site data are deleted at the next launch.
+
+Downloads can only go to `~/Downloads` (or a folder in it): that's all the sandbox lets Twinkle write.
 
 ### settings.json
 
@@ -151,7 +161,7 @@ The content-blocker JSON that `FilterConverter` produces is WebKit's format, whi
 
 ### Looking inside a running Twinkle
 
-`./debug.sh` asks the running app to write `state.json` (tabs, titles, URLs, loading state), `text.json` (each loaded tab's text), `window.png` and `page.png` to `~/Library/Application Support/Twinkle/debug/`, then prints the state (with `TWINKLE_PROFILE=<folder>`, the `--profile` Twinkle and `<folder>/debug/`). `./debug.sh open <url> [container]` opens a tab (`temporary` for a new temporary container) and `./debug.sh select <index>` brings one to the front. This works without Screen Recording permission. The page snapshot needs the window to be visible on screen.
+`./debug.sh` asks the running app to write `state.json` (tabs, titles, URLs, loading state), `text.json` (each loaded tab's text), `window.png` and `page.png` to Twinkle's folder in its container (`…/Twinkle/debug/`), then prints the state (with `TWINKLE_PROFILE=<folder>`, the `--profile` Twinkle and `<folder>/debug/`). `./debug.sh open <url> [container]` opens a tab (`temporary` for a new temporary container) and `./debug.sh select <index>` brings one to the front. This works without Screen Recording permission. The page snapshot needs the window to be visible on screen.
 
 ## Licence
 
