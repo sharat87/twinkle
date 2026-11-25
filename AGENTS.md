@@ -1,5 +1,9 @@
 # Notes for agents working on Twinkle
 
+## Scope
+
+Twinkle is deliberately minimal and meant to be finished soon (see the README). Don't add UI surface: no preference panes, toolbar buttons, command palette or in-app editors. Configuration is a JSON file the user edits; a command is a menu item (that's how it gets a shortcut and is found by Alfred/Raycast). Permissions are denied, not prompted. If a feature seems to need more than that, ask first.
+
 ## Build, test, run
 
 - `./build.sh release run` builds `build/Twinkle.app`, quits the running copy and opens the new one.

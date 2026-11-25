@@ -1,17 +1,26 @@
 # Twinkle
 
-A small, fast web browser for macOS, built on the system's WebKit.
+A minimal web browser for macOS, built on the system's WebKit. Vibed just for myself; I expect it to be "finished" after a few weeks of use, so it's not looking for features.
+
+**The UI surface is kept small:**
+
+- **Settings, containers and bookmarks are JSON files** you edit in your text editor. No preferences window. They're re-read whenever Twinkle comes to the front.
+- **Everything is in the menu bar.** No command palette, no toolbar buttons. For a fuzzy finder, use one for menu items, like Alfred or Raycast.
+- **Shortcuts are changed in macOS**, under System Settings › Keyboard › Keyboard Shortcuts › App Shortcuts, as for any menu item.
+- **No dev tools of its own.** Inspect Element opens Safari's Web Inspector.
+- **No MCP.** Once AppleScript support is added, ask your agent to write AppleScript.
+- **Permissions are always denied.** Camera, microphone and screen capture are refused without asking. Location and web notifications aren't implemented at all.
+
+## What's there
 
 - **Tabs down the right**, one address field, the page. No start page, no accounts.
 - **Containers**, like Firefox's Multi-Account Containers: tabs in one window, each container with its own cookies, storage and cache. Sites can be assigned to a container so they always open there.
 - **Temporary containers**: a throwaway cookie jar, kept only in memory and gone when its last tab closes.
 - **Idle tabs unload** after 30 minutes in the background, freeing their memory, and come back with their history when clicked. Tabs playing sound or holding a half-filled form are left alone.
-- **The page's host in the window title** (`Title - example.com`), so KeePassXC auto-type matches sites without a browser extension.
+- **The page's host in the window title** (`Title (example.com)`), so KeePassXC auto-type matches sites without a browser extension.
 - **Ad and tracker blocking** with EasyList and EasyPrivacy (or any EasyList/uBlock-syntax list, or hosts file), compiled into WebKit content blockers that run before requests are made.
-- **No permission prompts.** Camera, microphone and screen capture are always denied. Location and web notifications don't exist here.
 - **JSON responses pretty-printed** and highlighted, with exact numbers and key order (Raw shows the original).
 - **Address bar suggestions**: history and open tabs, fuzzy-matched like Sublime Text, with inline completion of addresses you've visited.
-- **Settings in plain files**, re-read whenever the app comes to the front.
 
 ## Build and run
 
@@ -22,6 +31,10 @@ Needs macOS 14+ and Swift 6 (the Command Line Tools are enough; Xcode isn't need
 ./build.sh debug run  # debug build, then (re)launch it
 ./test.sh             # tests for TwinkleCore
 ```
+
+Twinkle › Restart Twinkle quits and opens the app again, so a rebuild with `./build.sh` takes effect when you're ready.
+
+`--profile <folder>` runs a separate Twinkle that keeps everything in that folder, with its own cookies and filter lists, for testing without touching your own: `./build.sh release run --profile <folder>`.
 
 ## Files
 
@@ -103,7 +116,7 @@ A site covers its subdomains, and the most specific entry wins: here `mail.examp
 |---|---|
 | `⌘T` new tab (same container) · `⌃⌘0` new tab, no container · `⌃⌘1`–`9` new tab in container · `⌥⌘T` new temporary container | `⌘W` close · `⇧⌘T` reopen closed tab |
 | `⌘L` address · `⌘F` find · `⌘G` / `⇧⌘G` next / previous | `⌘[` / `⌘]` back / forward · `⌘R` reload · `⌥⌘R` reload from origin |
-| `⌃Tab` / `⌃⇧Tab`, `⇧⌘]` / `⇧⌘[` next / previous tab · `⌘1`–`⌘9` jump | `⌘+` (or `⌘=`) / `⌘-` / `⌘0` zoom, remembered per site · `⌃⌘S` tab list · `⇧⌘N` new container |
+| `⌃Tab` / `⌃⇧Tab`, `⇧⌘]` / `⇧⌘[` next / previous tab · `⌘1`–`⌘9` jump · `⇧⌘↑` / `⇧⌘↓` move tab up / down | `⌘+` (or `⌘=`) / `⌘-` / `⌘0` zoom, remembered per site · `⌃⌘S` tab list · `⇧⌘N` new container |
 | `⌥⇧⌘⌫` clear cookies and data for this site (Tools menu): everything the tab's container holds for the site, then a reload. For sign-ins that get stuck, like AWS. | |
 
 ⌘-click or middle-click a link to open it in a background tab in the same container; add ⇧ to switch to it. Middle-click a tab to close it. Right-click a tab to reopen it in another container (or a new temporary one), or to unload it now. Right-click a page › Inspect Element opens Safari's Web Inspector.
@@ -125,12 +138,12 @@ Sources/Twinkle/       The macOS app (AppKit + WKWebView).
   Favicons                 site icons, fetched without cookies
   JSONViewer               pretty-prints JSON responses
   AddressSuggestions       the address bar's dropdown
-scripts/make-icon.swift    draws the app icon (build.sh runs it)
   Debug                    inspection hook used by debug.sh
+scripts/make-icon.swift    draws the app icon (build.sh runs it)
 ```
 
 The content-blocker JSON that `FilterConverter` produces is WebKit's format, which WebKitGTK also reads, and the data files are plain JSON. Porting means writing a new shell, not translating data.
 
 ### Looking inside a running Twinkle
 
-`./debug.sh` asks the running app to write `state.json` (tabs, titles, URLs, loading state), `text.json` (each loaded tab's text), `window.png` and `page.png` to `~/Library/Application Support/Twinkle/debug/`, then prints the state. `./debug.sh open <url> [container]` opens a tab (`temporary` for a new temporary container) and `./debug.sh select <index>` brings one to the front. This works without Screen Recording permission. The page snapshot needs the window to be visible on screen.
+`./debug.sh` asks the running app to write `state.json` (tabs, titles, URLs, loading state), `text.json` (each loaded tab's text), `window.png` and `page.png` to `~/Library/Application Support/Twinkle/debug/`, then prints the state (with `TWINKLE_PROFILE=<folder>`, the `--profile` Twinkle and `<folder>/debug/`). `./debug.sh open <url> [container]` opens a tab (`temporary` for a new temporary container) and `./debug.sh select <index>` brings one to the front. This works without Screen Recording permission. The page snapshot needs the window to be visible on screen.
