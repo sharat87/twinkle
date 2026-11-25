@@ -13,6 +13,7 @@ enum MainMenu {
 
         main.addItem(submenu("Twinkle", [
             item("About Twinkle", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
+            item("Star the Repo on GitHub", #selector(AppDelegate.starRepo(_:)), target: app),
             .separator(),
             item("Settings…", #selector(AppDelegate.openSettings(_:)), ",", target: app),
             item("Edit Containers…", #selector(AppDelegate.openContainers(_:)), target: app),

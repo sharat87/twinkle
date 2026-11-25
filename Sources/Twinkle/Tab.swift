@@ -27,6 +27,9 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     private var showingErrorPage = false
     /// The next commit is the error page being shown.
     private var errorPageLoading = false
+    /// Whether the current page failed with a TLS or certificate error.
+    private(set) var hasTLSError = false
+    private(set) var tlsErrorMessage: String?
 
     private(set) var webView: WKWebView?
     /// Where the tab will go once its web view exists.
@@ -109,6 +112,11 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     var progress: Double { webView?.estimatedProgress ?? 0 }
     var isBlank: Bool { url == nil }
     var isUnloaded: Bool { webView == nil && !isBlank }
+    var isHTTPS: Bool { url?.scheme?.lowercased() == "https" }
+    var hasMixedContent: Bool {
+        isHTTPS && !hasTLSError && !showingErrorPage
+            && (webView.map { !$0.hasOnlySecureContent && !$0.isLoading } ?? false)
+    }
 
     /// For the session and the closed-tabs list.
     var saved: SavedTab? {
@@ -203,6 +211,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func load(_ url: URL) {
+        clearTLSError()
         unloadedState = nil
         if webView == nil {
             pendingURL = url
@@ -211,6 +220,11 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         } else {
             webView?.load(URLRequest(url: url))
         }
+    }
+
+    private func clearTLSError() {
+        hasTLSError = false
+        tlsErrorMessage = nil
     }
 
     private func loadPending() {
@@ -277,6 +291,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
             webView.observe(\.url) { v, _ in changed(v) },
             webView.observe(\.isLoading) { v, _ in changed(v) },
             webView.observe(\.estimatedProgress) { v, _ in changed(v) },
+            webView.observe(\.hasOnlySecureContent) { v, _ in changed(v) },
         ]
         return webView
     }
@@ -319,6 +334,9 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
                 host?.tab(self, open: url, inAssigned: assigned)
                 decisionHandler(.cancel)
                 return
+            }
+            if !errorPageLoading {
+                clearTLSError()
             }
             Blocker.shared.tune(webView.configuration.userContentController, host: url.host())
         }
@@ -383,8 +401,11 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         // The error page commits at the failed address: not a visit.
         showingErrorPage = errorPageLoading
         errorPageLoading = false
-        if !showingErrorPage, let url = webView.url {
-            AppState.shared.recordVisit(url, title: webView.title ?? "", container: containerID)
+        if !showingErrorPage {
+            clearTLSError()
+            if let url = webView.url {
+                AppState.shared.recordVisit(url, title: webView.title ?? "", container: containerID)
+            }
         }
         // Each site's remembered zoom, applied as its page arrives.
         let zoom = AppState.shared.zoom(forHost: webView.url?.host())
@@ -409,11 +430,42 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         webView.reload()
     }
 
+    private static let tlsErrorCodes: Set<Int> = [
+        NSURLErrorSecureConnectionFailed,
+        NSURLErrorServerCertificateHasBadDate,
+        NSURLErrorServerCertificateUntrusted,
+        NSURLErrorServerCertificateHasUnknownRoot,
+        NSURLErrorServerCertificateNotYetValid,
+        NSURLErrorClientCertificateRejected,
+        NSURLErrorClientCertificateRequired,
+    ]
+
+    private static func isTLSError(_ error: NSError) -> Bool {
+        var current: NSError? = error
+        var depth = 0
+        while let e = current, depth < 5 {
+            if e.domain == NSURLErrorDomain && tlsErrorCodes.contains(e.code) {
+                return true
+            }
+            if e.userInfo[NSURLErrorFailingURLPeerTrustErrorKey] != nil {
+                return true
+            }
+            current = e.userInfo[NSUnderlyingErrorKey] as? NSError
+            depth += 1
+        }
+        return false
+    }
+
     private func showError(_ error: Error, in webView: WKWebView) {
         let e = error as NSError
         // Cancelled, interrupted by a download, or handled elsewhere.
         if e.domain == NSURLErrorDomain && e.code == NSURLErrorCancelled { return }
         if e.domain == "WebKitErrorDomain" && [102, 204].contains(e.code) { return }
+        if Self.isTLSError(e) {
+            hasTLSError = true
+            tlsErrorMessage = e.localizedDescription
+            host?.tabDidChange(self)
+        }
         let failing = (e.userInfo[NSURLErrorFailingURLErrorKey] as? URL) ?? webView.url
         errorPageLoading = true
         webView.loadHTMLString(ErrorPage.html(error: e, url: failing), baseURL: failing)

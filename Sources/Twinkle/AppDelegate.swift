@@ -70,6 +70,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Menu actions
 
+    @objc func starRepo(_ sender: Any?) {
+        let url = URL(string: "https://github.com/sharat87/twinkle")!
+        controller?.open(url)
+        controller?.showWindow(nil)
+        NSApp.activate()
+    }
+
     @objc func openSettings(_ sender: Any?) {
         edit(AppState.shared.files.url(AppState.settingsFile))
     }

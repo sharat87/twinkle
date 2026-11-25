@@ -34,6 +34,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     private let statusIcon = NSImageView()
     private let statusCancel = NSButton()
     private let addressField = NSTextField()
+    private let securityIcon = NSImageView()
     private let badge = NSTextField(labelWithString: "")
     private let badgeBox = NSView()
     private let addressBox = NSBox()
@@ -134,8 +135,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         table.headerView = nil
         table.style = .sourceList
         table.backgroundColor = .clear
-        table.rowHeight = 40
-        table.intercellSpacing = NSSize(width: 0, height: 2)
+        table.rowHeight = 42
+        table.intercellSpacing = .zero
         table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         table.dataSource = self
         table.delegate = self
@@ -233,7 +234,17 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         ])
         badgeBox.isHidden = true
 
-        let row = NSStackView(views: [badgeBox, addressField])
+        securityIcon.imageScaling = .scaleProportionallyDown
+        securityIcon.translatesAutoresizingMaskIntoConstraints = false
+        securityIcon.setContentHuggingPriority(.required, for: .horizontal)
+        securityIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
+        securityIcon.isHidden = true
+        NSLayoutConstraint.activate([
+            securityIcon.widthAnchor.constraint(equalToConstant: 16),
+            securityIcon.heightAnchor.constraint(equalToConstant: 16),
+        ])
+
+        let row = NSStackView(views: [badgeBox, securityIcon, addressField])
         row.orientation = .horizontal
         row.spacing = 6
         row.alignment = .centerY
@@ -430,12 +441,48 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
     }
 
-    /// The address field, container badge, progress bar and window title.
-    private func updateChrome() {
-        guard let tab = current else { return }
-        if addressField.currentEditor() == nil {
-            addressField.stringValue = tab.url?.absoluteString ?? ""
+    private func displayAddress(for tab: Tab) -> String {
+        let s = tab.url?.absoluteString ?? ""
+        if tab.hasTLSError || tab.hasMixedContent { return s }
+        if tab.isHTTPS, let range = s.range(of: "https://", options: [.anchored, .caseInsensitive]) {
+            return String(s[range.upperBound...])
         }
+        return s
+    }
+
+    private func updateSecurityIndicator(for tab: Tab, editing: Bool) {
+        if tab.hasTLSError {
+            securityIcon.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill",
+                                         accessibilityDescription: "TLS certificate error")
+            securityIcon.contentTintColor = .systemRed
+            securityIcon.toolTip = tab.tlsErrorMessage ?? "TLS certificate error"
+            securityIcon.isHidden = false
+        } else if tab.hasMixedContent {
+            securityIcon.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill",
+                                         accessibilityDescription: "Mixed content")
+            securityIcon.contentTintColor = .systemOrange
+            securityIcon.toolTip = "Page includes insecure content"
+            securityIcon.isHidden = false
+        } else if tab.isHTTPS && !editing {
+            securityIcon.image = NSImage(systemSymbolName: "lock.fill",
+                                         accessibilityDescription: "HTTPS")
+            securityIcon.contentTintColor = .systemGreen
+            securityIcon.toolTip = "HTTPS"
+            securityIcon.isHidden = false
+        } else {
+            securityIcon.isHidden = true
+            securityIcon.toolTip = nil
+        }
+    }
+
+    /// The address field, security indicator, container badge, progress bar and window title.
+    private func updateChrome(editing: Bool? = nil) {
+        guard let tab = current else { return }
+        let editing = editing ?? (addressField.currentEditor() != nil)
+        if !editing {
+            addressField.stringValue = displayAddress(for: tab)
+        }
+        updateSecurityIndicator(for: tab, editing: editing)
         if let container = AppState.shared.container(tab.containerID) {
             badge.stringValue = container.name
             badgeBox.layer?.backgroundColor = NSColor(hex: container.color).cgColor
@@ -458,6 +505,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     func tabDidChange(_ tab: Tab) {
         guard let row = index(of: tab) else { return }
         table.reloadData(forRowIndexes: IndexSet(integer: row), columnIndexes: IndexSet(integer: 0))
+        refreshContainerIndicators()
         if row == selected { updateChrome() }
         scheduleSave()
     }
@@ -503,7 +551,31 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     func numberOfRows(in tableView: NSTableView) -> Int { tabs.count }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-        TabRowView()
+        let rowView = TabRowView()
+        configureRowView(rowView, at: row)
+        return rowView
+    }
+
+    private func configureRowView(_ rowView: TabRowView, at row: Int) {
+        guard tabs.indices.contains(row) else {
+            rowView.containerColor = nil
+            rowView.continuesAbove = false
+            rowView.continuesBelow = false
+            return
+        }
+        let containerID = tabs[row].containerID
+        let color = AppState.shared.container(containerID).map { NSColor(hex: $0.color) }
+        rowView.containerColor = color
+        rowView.continuesAbove = color != nil && row > 0 && tabs[row - 1].containerID == containerID
+        rowView.continuesBelow = color != nil && row + 1 < tabs.count && tabs[row + 1].containerID == containerID
+    }
+
+    private func refreshContainerIndicators() {
+        table.enumerateAvailableRowViews { rowView, row in
+            if let tabRow = rowView as? TabRowView {
+                configureRowView(tabRow, at: row)
+            }
+        }
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -667,7 +739,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             updateChrome()
         }
         s.switchTo = { [unowned self] tab in
-            addressField.stringValue = current?.url?.absoluteString ?? ""
+            addressField.stringValue = displayAddress(for: tab)
             if let i = index(of: tab) { select(i) }
             window?.makeFirstResponder(current?.webView)
             updateChrome()
@@ -708,7 +780,17 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     func debugSuggestionsView() -> NSView? { suggestions.isVisible ? suggestions.contentView : nil }
 
     func controlTextDidBeginEditing(_ obj: Notification) {
-        if (obj.object as? NSTextField) === addressField { suggestions.began() }
+        guard (obj.object as? NSTextField) === addressField else { return }
+        if let tab = current {
+            if let full = tab.url?.absoluteString,
+               addressField.stringValue != full,
+               addressField.stringValue == displayAddress(for: tab) {
+                addressField.stringValue = full
+                (obj.userInfo?["NSFieldEditor"] as? NSTextView)?.string = full
+            }
+            updateSecurityIndicator(for: tab, editing: true)
+        }
+        suggestions.began()
     }
 
     func controlTextDidChange(_ obj: Notification) {
@@ -716,7 +798,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
-        if (obj.object as? NSTextField) === addressField { suggestions.hide() }
+        if (obj.object as? NSTextField) === addressField {
+            suggestions.hide()
+            updateChrome(editing: false)
+        }
     }
 
     func windowDidResize(_ notification: Notification) {
@@ -743,8 +828,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         if control === addressField, suggestions.handle(selector) { return true }
         if selector == #selector(NSResponder.cancelOperation(_:)) {
             if control === addressField {
-                addressField.stringValue = current?.url?.absoluteString ?? ""
+                addressField.stringValue = current.map { displayAddress(for: $0) } ?? ""
                 if let webView = current?.webView { window?.makeFirstResponder(webView) }
+                updateChrome()
                 return true
             }
             if control === findField {
@@ -880,6 +966,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     @objc func focusAddress(_ sender: Any?) {
         suggestions.prepare()
+        if addressField.currentEditor() == nil {
+            addressField.stringValue = current?.url?.absoluteString ?? ""
+        }
+        if let tab = current {
+            updateSecurityIndicator(for: tab, editing: true)
+        }
         window?.makeFirstResponder(addressField)
         addressField.currentEditor()?.selectAll(nil)
     }
@@ -1197,11 +1289,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 }
 
-/// A row in the tab list: the container's colour, the title, a spinner.
+/// A row in the tab list: the favicon, the title, a spinner.
 final class TabCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("TabCell")
 
-    private let stripe = NSView()
     private let favicon = NSImageView()
     private let title = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
@@ -1209,8 +1300,6 @@ final class TabCell: NSTableCellView {
     init() {
         super.init(frame: .zero)
         identifier = Self.identifier
-        stripe.wantsLayer = true
-        stripe.layer?.cornerRadius = 1.5
         title.lineBreakMode = .byTruncatingTail
         title.font = UI.font
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -1219,16 +1308,14 @@ final class TabCell: NSTableCellView {
         spinner.isDisplayedWhenStopped = false
         textField = title
         favicon.imageScaling = .scaleProportionallyUpOrDown
-        for v in [stripe, favicon, title, spinner] {
+        for v in [favicon, title, spinner] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
         NSLayoutConstraint.activate([
-            stripe.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
-            stripe.widthAnchor.constraint(equalToConstant: 3),
-            stripe.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            stripe.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
-            favicon.leadingAnchor.constraint(equalTo: stripe.trailingAnchor, constant: 7),
+            // `.sourceList` insets the cell by 16pt from the row view's left edge,
+            // placing the favicon 8pt inside the selection pill (x = 15 in row coords).
+            favicon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 7),
             favicon.centerYAnchor.constraint(equalTo: centerYAnchor),
             favicon.widthAnchor.constraint(equalToConstant: 18),
             favicon.heightAnchor.constraint(equalToConstant: 18),
@@ -1256,12 +1343,6 @@ final class TabCell: NSTableCellView {
         favicon.image = tab.icon ?? Self.placeholder
         favicon.alphaValue = tab.isUnloaded ? 0.5 : 1
         toolTip = tab.url?.absoluteString
-        if let container = AppState.shared.container(tab.containerID) {
-            stripe.layer?.backgroundColor = NSColor(hex: container.color).cgColor
-            stripe.isHidden = false
-        } else {
-            stripe.isHidden = true
-        }
         if tab.isLoading { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
     }
 }
@@ -1326,11 +1407,85 @@ enum ContainerMenus {
 }
 
 /// A tab row whose selection stays in the accent colour when the focus
-/// moves to the page, instead of fading to the unemphasized grey.
+/// moves to the page, instead of fading to the unemphasized grey, and
+/// draws the container indicator strip in the gutter outside the pill.
 final class TabRowView: NSTableRowView {
+    var containerColor: NSColor? {
+        didSet {
+            if containerColor != oldValue { needsDisplay = true }
+        }
+    }
+    var continuesAbove = false {
+        didSet {
+            if continuesAbove != oldValue { needsDisplay = true }
+        }
+    }
+    var continuesBelow = false {
+        didSet {
+            if continuesBelow != oldValue { needsDisplay = true }
+        }
+    }
+
     override var isEmphasized: Bool {
         get { true }
         set {}
+    }
+
+    override func drawBackground(in dirtyRect: NSRect) {
+        super.drawBackground(in: dirtyRect)
+        guard let containerColor else { return }
+
+        let topInset: CGFloat = continuesAbove ? 0 : 6
+        let bottomInset: CGFloat = continuesBelow ? 0 : 6
+        let minYInset = isFlipped ? topInset : bottomInset
+        let maxYInset = isFlipped ? bottomInset : topInset
+        let rect = NSRect(x: 6, y: minYInset, width: 5, height: bounds.height - minYInset - maxYInset)
+        guard rect.height > 0 else { return }
+
+        let roundMinY = isFlipped ? !continuesAbove : !continuesBelow
+        let roundMaxY = isFlipped ? !continuesBelow : !continuesAbove
+        let radius = min(2.5, rect.width / 2, rect.height / 2)
+        let minYRadius = roundMinY ? radius : 0
+        let maxYRadius = roundMaxY ? radius : 0
+
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: rect.minX + minYRadius, y: rect.minY))
+        path.line(to: NSPoint(x: rect.maxX - minYRadius, y: rect.minY))
+        if minYRadius > 0 {
+            path.appendArc(from: NSPoint(x: rect.maxX, y: rect.minY),
+                           to: NSPoint(x: rect.maxX, y: rect.minY + minYRadius),
+                           radius: minYRadius)
+        }
+        path.line(to: NSPoint(x: rect.maxX, y: rect.maxY - maxYRadius))
+        if maxYRadius > 0 {
+            path.appendArc(from: NSPoint(x: rect.maxX, y: rect.maxY),
+                           to: NSPoint(x: rect.maxX - maxYRadius, y: rect.maxY),
+                           radius: maxYRadius)
+        }
+        path.line(to: NSPoint(x: rect.minX + maxYRadius, y: rect.maxY))
+        if maxYRadius > 0 {
+            path.appendArc(from: NSPoint(x: rect.minX, y: rect.maxY),
+                           to: NSPoint(x: rect.minX, y: rect.maxY - maxYRadius),
+                           radius: maxYRadius)
+        }
+        path.line(to: NSPoint(x: rect.minX, y: rect.minY + minYRadius))
+        if minYRadius > 0 {
+            path.appendArc(from: NSPoint(x: rect.minX, y: rect.minY),
+                           to: NSPoint(x: rect.minX + minYRadius, y: rect.minY),
+                           radius: minYRadius)
+        }
+        path.close()
+
+        containerColor.setFill()
+        path.fill()
+    }
+
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard selectionHighlightStyle != .none else { return }
+        let rect = NSRect(x: 15, y: 1, width: bounds.width - 25, height: bounds.height - 2)
+        guard rect.width > 0, rect.height > 0 else { return }
+        NSColor.selectedContentBackgroundColor.setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
     }
 }
 
