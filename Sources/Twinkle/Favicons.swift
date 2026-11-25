@@ -6,9 +6,12 @@ import TwinkleCore
 /// page loads its `<link rel=icon>` elements are read and the best one is
 /// fetched, falling back to /favicon.ico.
 ///
+/// Some sites (GitHub) swap in a light icon when the page is dark, so icons
+/// are kept per host and appearance, and tabs fetch again when it changes.
+///
 /// Icons are fetched without cookies (an ephemeral session), so fetching one
 /// tells the site nothing a container's cookies would. They are kept per host,
-/// in memory and as small PNGs in favicons/ so restored tabs have them at
+/// in memory and as small PNGs in site-icons/ so restored tabs have them at
 /// launch. Temporary containers' icons stay in memory only.
 @MainActor
 final class Favicons {
@@ -25,9 +28,32 @@ final class Favicons {
         return URLSession(configuration: config)
     }()
 
+    private var appearanceObservation: NSKeyValueObservation?
+    /// Posted when the app turns light or dark; tabs pick their icons again.
+    static let appearanceChanged = Notification.Name("TwinkleFaviconAppearanceChanged")
+
     private init() {
-        directory = AppState.shared.files.directory.appendingPathComponent("favicons", isDirectory: true)
+        let base = AppState.shared.files.directory
+        directory = base.appendingPathComponent("site-icons", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // The old cache, one icon per host whatever the appearance.
+        try? FileManager.default.removeItem(at: base.appendingPathComponent("favicons", isDirectory: true))
+        var wasDark = Self.isDark
+        appearanceObservation = NSApp.observe(\.effectiveAppearance) { _, _ in
+            MainActor.assumeIsolated {
+                guard Self.isDark != wasDark else { return }
+                wasDark = Self.isDark
+                NotificationCenter.default.post(name: Self.appearanceChanged, object: nil)
+            }
+        }
+    }
+
+    private static var isDark: Bool {
+        NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    }
+
+    private func key(for page: URL) -> String? {
+        page.host().map { $0.lowercased() + (Self.isDark ? " dark" : " light") }
     }
 
     /// `[href, sizes, type]` for each icon link on the page.
@@ -37,7 +63,7 @@ final class Favicons {
     """
 
     func cached(for page: URL, container: UUID?) -> NSImage? {
-        guard let host = page.host()?.lowercased() else { return nil }
+        guard let host = key(for: page) else { return nil }
         if let image = memory[host] { return image }
         if AppState.shared.isTemporary(container) { return nil }
         guard let data = try? Data(contentsOf: file(for: host)), let image = NSImage(data: data) else { return nil }
@@ -46,7 +72,7 @@ final class Favicons {
     }
 
     func load(for page: URL, links: [[String]], container: UUID?, done: @escaping (NSImage?) -> Void) {
-        guard let host = page.host()?.lowercased() else { return done(nil) }
+        guard let host = key(for: page) else { return done(nil) }
         if let image = memory[host] { return done(image) }
         guard !inFlight.contains(host) else { return done(nil) }
         inFlight.insert(host)

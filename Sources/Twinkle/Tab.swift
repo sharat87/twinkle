@@ -58,6 +58,23 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         self.isPopup = false
         super.init()
         icon = url.flatMap { Favicons.shared.cached(for: $0, container: container) }
+        observeAppearance()
+    }
+
+    /// The icon for the new appearance, from the cache or the page, after
+    /// giving the page's scripts a moment to swap their icon links.
+    private func observeAppearance() {
+        NotificationCenter.default.addObserver(self, selector: #selector(appearanceChanged), name: Favicons.appearanceChanged, object: nil)
+    }
+
+    @objc private func appearanceChanged() {
+        guard let url = webView?.url ?? pendingURL else { return }
+        if let icon = Favicons.shared.cached(for: url, container: containerID) {
+            self.icon = icon
+            host?.tabDidChange(self)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.fetchIcon() }
+        }
     }
 
     /// A tab for a page opened by another (window.open, target=_blank).
@@ -72,6 +89,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         self.isPopup = true
         super.init()
         webView = makeWebView(configuration: popupConfiguration)
+        observeAppearance()
     }
 
     // MARK: State
@@ -345,7 +363,12 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        guard let page = webView.url, ["http", "https"].contains(page.scheme ?? "") else { return }
+        fetchIcon()
+    }
+
+    private func fetchIcon() {
+        guard let webView, !webView.isLoading, let page = webView.url,
+              ["http", "https"].contains(page.scheme ?? "") else { return }
         webView.evaluateJavaScript(Favicons.linksScript) { [weak self] value, _ in
             let links = (value as? [[String]]) ?? []
             Favicons.shared.load(for: page, links: links, container: self?.containerID) { image in
