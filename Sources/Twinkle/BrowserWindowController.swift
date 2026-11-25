@@ -466,6 +466,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     func numberOfRows(in tableView: NSTableView) -> Int { tabs.count }
 
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        TabRowView()
+    }
+
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let cell = tableView.makeView(withIdentifier: TabCell.identifier, owner: nil) as? TabCell ?? TabCell()
         cell.show(tabs[row])
@@ -1174,6 +1178,15 @@ enum ContainerMenus {
             item.tag = tag
             menu.addItem(item)
         }
+    }
+}
+
+/// A tab row whose selection stays in the accent colour when the focus
+/// moves to the page, instead of fading to the unemphasized grey.
+final class TabRowView: NSTableRowView {
+    override var isEmphasized: Bool {
+        get { true }
+        set {}
     }
 }
 

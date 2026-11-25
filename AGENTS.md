@@ -17,3 +17,7 @@
 
 - Back up `session.json` and `history.sqlite` before testing in the running app, then restore them, or remove what the test added, afterwards. Quit Twinkle before restoring: it saves its session when it quits.
 - Don't print history or cookies wholesale; they hold private addresses and tokens.
+
+## Git
+
+- Commit every change as soon as it's done and verified; never leave the working copy dirty. A follow-up fix to the same change can amend that commit.
