@@ -109,6 +109,9 @@ enum MainMenu {
             .separator(),
             item("Show Next Tab", #selector(BrowserWindowController.nextTab(_:)), "]", [.command, .shift]),
             item("Show Previous Tab", #selector(BrowserWindowController.previousTab(_:)), "[", [.command, .shift]),
+            item("Move Tab Up", #selector(BrowserWindowController.moveTabUp(_:)), "\u{F700}", [.command, .shift]),
+            item("Move Tab Down", #selector(BrowserWindowController.moveTabDown(_:)), "\u{F701}", [.command, .shift]),
+            .separator(),
         ]
         for n in 1...9 {
             let i = item(n == 9 ? "Last Tab" : "Tab \(n)", #selector(BrowserWindowController.selectTabByNumber(_:)), String(n))

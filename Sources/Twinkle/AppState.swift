@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import TwinkleCore
 import WebKit
 
@@ -29,14 +30,70 @@ final class AppState {
     static let sessionFile = "session.json"
     static let zoomFile = "zoom.json"
 
+    /// Set by `--profile <folder>`: a separate Twinkle, for testing, that
+    /// keeps everything in that folder and nothing in the usual one. Its web
+    /// data stores and compiled filter lists are its own too, and the debug
+    /// notifications it listens for carry the folder's path.
+    let profile: String?
+    /// A random id kept in the profile folder; WebKit's data stores for the
+    /// profile are derived from it, so a deleted folder starts afresh.
+    private var profileID: UUID?
+
     private init() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         do {
-            files = try FileStore(directory: support.appendingPathComponent("Twinkle", isDirectory: true))
+            if let path = Self.profileArgument() {
+                let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath).standardizedFileURL
+                files = try FileStore(directory: url)
+                profile = Self.realPath(url.path)
+                profileID = Self.loadProfileID(files)
+            } else {
+                let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                files = try FileStore(directory: support.appendingPathComponent("Twinkle", isDirectory: true))
+                profile = nil
+            }
         } catch {
-            fatalError("Can't create Twinkle's folder in Application Support: \(error)")
+            fatalError("Can't create Twinkle's folder: \(error)")
         }
         reload()
+    }
+
+    /// `--profile <folder>` or `--profile=<folder>`.
+    private static func profileArgument() -> String? {
+        let args = CommandLine.arguments
+        for (i, arg) in args.enumerated() {
+            if arg == "--profile", i + 1 < args.count { return args[i + 1] }
+            if arg.hasPrefix("--profile=") { return String(arg.dropFirst("--profile=".count)) }
+        }
+        return nil
+    }
+
+    private static func realPath(_ path: String) -> String {
+        guard let resolved = realpath(path, nil) else { return path }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
+    private static func loadProfileID(_ files: FileStore) -> UUID {
+        let name = "profile-id"
+        if let text = try? String(contentsOf: files.url(name), encoding: .utf8),
+           let id = UUID(uuidString: text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return id
+        }
+        let id = UUID()
+        try? (id.uuidString + "\n").write(to: files.url(name), atomically: true, encoding: .utf8)
+        return id
+    }
+
+    /// A profile's own id for a container's store (nil: no container), so a
+    /// profile never shares cookies with the usual Twinkle, even when its
+    /// containers.json was copied from there.
+    private func storeID(_ container: UUID?) -> UUID? {
+        guard let profileID else { return container }
+        let key = profileID.uuidString + (container?.uuidString ?? "default")
+        var bytes = Array(SHA256.hash(data: Data(key.utf8)).prefix(16))
+        bytes[6] = (bytes[6] & 0x0F) | 0x50
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return NSUUID(uuidBytes: bytes) as UUID
     }
 
     /// Reads the files again if they changed on disk. Missing files are
@@ -152,11 +209,27 @@ final class AppState {
     /// container": WebKit's default store. One instance per container, shared
     /// by all its tabs, so they also share a network process.
     func dataStore(for id: UUID?) -> WKWebsiteDataStore {
-        guard let id else { return .default() }
+        guard let id else {
+            if let own = storeID(nil) { return defaultProfileStore(own) }
+            return .default()
+        }
         if let store = stores[id] { return store }
-        let store = isTemporary(id) ? WKWebsiteDataStore.nonPersistent() : WKWebsiteDataStore(forIdentifier: id)
+        let store = isTemporary(id) ? WKWebsiteDataStore.nonPersistent() : WKWebsiteDataStore(forIdentifier: storeID(id) ?? id)
         stores[id] = store
         return store
+    }
+
+    private var profileDefaultStore: WKWebsiteDataStore?
+    private func defaultProfileStore(_ id: UUID) -> WKWebsiteDataStore {
+        if let store = profileDefaultStore { return store }
+        let store = WKWebsiteDataStore(forIdentifier: id)
+        profileDefaultStore = store
+        return store
+    }
+
+    /// The window's autosave names in user defaults, kept apart per profile.
+    func defaultsName(_ name: String) -> String {
+        profile.map { "\(name) \($0)" } ?? name
     }
 
     // MARK: History

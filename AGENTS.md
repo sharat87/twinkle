@@ -15,7 +15,8 @@
 
 `~/Library/Application Support/Twinkle/` holds the user's real session, history, bookmarks, containers and settings.
 
-- Back up `session.json` and `history.sqlite` before testing in the running app, then restore them, or remove what the test added, afterwards. Quit Twinkle before restoring: it saves its session when it quits.
+- **Test in a separate profile, not the user's running Twinkle**: `./build.sh release run --profile <folder>` starts a second Twinkle that keeps everything in `<folder>` (use the scratchpad), with its own cookies and compiled filter lists, and only quits/replaces that profile's instance. Drive it with `TWINKLE_PROFILE=<folder> ./debug.sh …`; its dumps land in `<folder>/debug/`. Plain `./build.sh release run` quits and restarts the user's own Twinkle, so only do that when they ask.
+- If you must test in the user's own Twinkle, back up `session.json` and `history.sqlite` before testing in the running app, then restore them, or remove what the test added, afterwards. Quit Twinkle before restoring: it saves its session when it quits.
 - Don't print history or cookies wholesale; they hold private addresses and tokens.
 
 ## Git

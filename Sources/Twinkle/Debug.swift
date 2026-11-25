@@ -3,7 +3,8 @@ import WebKit
 
 /// A way to look inside a running Twinkle from the shell, without screen
 /// recording permission: `./debug.sh` posts a distributed notification and
-/// Twinkle writes its state to ~/Library/Application Support/Twinkle/debug/:
+/// Twinkle writes its state to debug/ in its folder
+/// (~/Library/Application Support/Twinkle/, or the `--profile` folder):
 ///
 /// - state.json  the tabs, their addresses, titles, loading state, container
 /// - window.png  the window's own views (sidebar, toolbar)
@@ -12,9 +13,15 @@ import WebKit
 /// It only writes files on this Mac, and only when asked.
 @MainActor
 enum Debug {
-    static let notification = Notification.Name("dev.twinkle.debug.dump")
-    static let openNotification = Notification.Name("dev.twinkle.debug.open")
-    static let selectNotification = Notification.Name("dev.twinkle.debug.select")
+    static let notification = name("dump")
+    static let openNotification = name("open")
+    static let selectNotification = name("select")
+
+    /// "dev.twinkle.debug.<command>", with ":<folder>" for a `--profile`
+    /// Twinkle, so `TWINKLE_PROFILE=<folder> ./debug.sh` drives only that one.
+    static func name(_ command: String) -> Notification.Name {
+        Notification.Name("dev.twinkle.debug.\(command)" + (AppState.shared.profile.map { ":" + $0 } ?? ""))
+    }
 
     static func install(_ controller: @escaping () -> BrowserWindowController?) {
         DistributedNotificationCenter.default().addObserver(forName: notification, object: nil, queue: .main) { _ in
@@ -39,16 +46,16 @@ enum Debug {
         }
         // `./debug.sh type <text>` and `./debug.sh key <name>`: the address
         // field, as if typed, one character at a time.
-        DistributedNotificationCenter.default().addObserver(forName: .init("dev.twinkle.debug.type"), object: nil, queue: .main) { note in
+        DistributedNotificationCenter.default().addObserver(forName: name("type"), object: nil, queue: .main) { note in
             let text = note.object as? String ?? ""
             MainActor.assumeIsolated { controller()?.debugType(text) }
         }
-        DistributedNotificationCenter.default().addObserver(forName: .init("dev.twinkle.debug.key"), object: nil, queue: .main) { note in
+        DistributedNotificationCenter.default().addObserver(forName: name("key"), object: nil, queue: .main) { note in
             let key = note.object as? String ?? ""
             MainActor.assumeIsolated { controller()?.debugKey(key) }
         }
         // `./debug.sh action <selector>`: a menu command, e.g. clearSiteData:
-        DistributedNotificationCenter.default().addObserver(forName: .init("dev.twinkle.debug.action"), object: nil, queue: .main) { note in
+        DistributedNotificationCenter.default().addObserver(forName: name("action"), object: nil, queue: .main) { note in
             let name = note.object as? String ?? ""
             MainActor.assumeIsolated {
                 // To the window directly: with Twinkle in the background
@@ -61,7 +68,7 @@ enum Debug {
         // `./debug.sh mouse <button>`: a click of that mouse button in the
         // middle of the window (3 is the back side button, 4 forward),
         // queued like a real one so event monitors see it.
-        DistributedNotificationCenter.default().addObserver(forName: .init("dev.twinkle.debug.mouse"), object: nil, queue: .main) { note in
+        DistributedNotificationCenter.default().addObserver(forName: name("mouse"), object: nil, queue: .main) { note in
             let button = Int(note.object as? String ?? "") ?? 3
             MainActor.assumeIsolated {
                 guard let window = controller()?.window, let view = window.contentView else { return }

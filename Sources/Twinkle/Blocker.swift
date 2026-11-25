@@ -15,7 +15,11 @@ import WebKit
 final class Blocker {
     static let shared = Blocker()
 
-    private let store = WKContentRuleListStore.default()!
+    /// A profile compiles its lists into its own folder, so it can't replace
+    /// or delete the usual Twinkle's.
+    private let store: WKContentRuleListStore = AppState.shared.profile == nil
+        ? WKContentRuleListStore.default()!
+        : WKContentRuleListStore(url: AppState.shared.files.directory.appendingPathComponent("filters/compiled", isDirectory: true))!
     private(set) var lists: [WKContentRuleList] = []
 
     private let controllers = NSHashTable<WKUserContentController>.weakObjects()

@@ -80,7 +80,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         split.addSplitViewItem(NSSplitViewItem(viewController: content))
         split.addSplitViewItem(tabListItem)
         split.splitView.dividerStyle = .thin
-        split.splitView.autosaveName = "TwinkleTabList"
+        split.splitView.autosaveName = AppState.shared.defaultsName("TwinkleTabList")
         window.contentViewController = split
 
         let toolbar = NSToolbar(identifier: "TwinkleToolbar")
@@ -89,11 +89,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         toolbar.allowsUserCustomization = false
         window.toolbar = toolbar
 
-        if !window.setFrameUsingName("TwinkleWindow") {
+        let frameName = AppState.shared.defaultsName("TwinkleWindow")
+        if !window.setFrameUsingName(frameName) {
             window.setContentSize(NSSize(width: 1280, height: 820))
             window.center()
         }
-        window.setFrameAutosaveName("TwinkleWindow")
+        window.setFrameAutosaveName(frameName)
 
         let center = NotificationCenter.default
         center.addObserver(forName: .status, object: nil, queue: .main) { [weak self] note in
@@ -511,14 +512,20 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
                    dropOperation: NSTableView.DropOperation) -> Bool {
         guard let s = info.draggingPasteboard.pasteboardItems?.first?.string(forType: .twinkleTab),
               let from = Int(s), tabs.indices.contains(from) else { return false }
-        let to = from < row ? row - 1 : row
-        guard to != from else { return false }
+        return moveTab(from: from, to: from < row ? row - 1 : row)
+    }
+
+    /// Moves a tab in the list, keeping the same tab in front.
+    @discardableResult
+    func moveTab(from: Int, to: Int) -> Bool {
+        guard tabs.indices.contains(from), tabs.indices.contains(to), to != from else { return false }
         let front = current
         let tab = tabs.remove(at: from)
         tabs.insert(tab, at: to)
         selected = front.flatMap(index(of:)) ?? selected
         table.reloadData()
         syncTableSelection()
+        table.scrollRowToVisible(to)
         scheduleSave()
         return true
     }
@@ -914,6 +921,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         select((selected - 1 + tabs.count) % tabs.count)
     }
 
+    @objc func moveTabUp(_ sender: Any?) {
+        moveTab(from: selected, to: selected - 1)
+    }
+
+    @objc func moveTabDown(_ sender: Any?) {
+        moveTab(from: selected, to: selected + 1)
+    }
+
     /// ⌘1–⌘8 pick that tab; ⌘9 the last one.
     @objc func selectTabByNumber(_ sender: NSMenuItem) {
         guard !tabs.isEmpty else { return }
@@ -1005,7 +1020,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             return host != nil
         case #selector(reopenClosedTab(_:)): return !closedTabs.isEmpty
         case #selector(closeOtherTabs(_:)): return tabs.count > 1
-        case #selector(closeTabsBelow(_:)): return selected < tabs.count - 1
+        case #selector(closeTabsBelow(_:)), #selector(moveTabDown(_:)): return selected < tabs.count - 1
+        case #selector(moveTabUp(_:)): return selected > 0
         case #selector(reopenInContainer(_:)):
             item.state = ContainerMenus.isCurrent(item, current?.containerID) ? .on : .off
             return current?.url != nil
