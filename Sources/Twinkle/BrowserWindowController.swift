@@ -422,8 +422,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     /// Closes several tabs at once; each can come back with Reopen Closed
     /// Tab. If the front tab goes, the first tab after the closed ones
-    /// takes its place.
-    func closeTabs(at indices: IndexSet) {
+    /// takes its place, or the one above them with `above`.
+    func closeTabs(at indices: IndexSet, above: Bool = false) {
         let indices = indices.filteredIndexSet { tabs.indices.contains($0) }
         guard let last = indices.last else { return }
         let closing = indices.map { tabs[$0] }
@@ -448,7 +448,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
         let next: Int
         if indices.contains(selected) {
-            next = min(last + 1 - indices.count, tabs.count - 1)
+            let after = min(last + 1 - indices.count, tabs.count - 1)
+            next = above ? max(indices.first! - 1, 0) : after
         } else {
             next = selected - indices.count(in: 0..<max(selected, 0))
         }
@@ -564,8 +565,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         return tab.webView
     }
 
+    /// A page closing itself (window.close()) is usually a popup done with
+    /// sign-in or the like, so land on the tab above: the one that opened it.
     func tabWantsClose(_ tab: Tab) {
-        if let i = index(of: tab) { closeTab(at: i) }
+        if let i = index(of: tab) { closeTabs(at: IndexSet(integer: i), above: true) }
     }
 
     /// A fresh tab is replaced by one in the right container; a tab with a
