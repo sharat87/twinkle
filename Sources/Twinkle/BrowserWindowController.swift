@@ -1409,7 +1409,6 @@ final class TabCell: NSTableCellView {
         spinner.style = .spinning
         spinner.controlSize = .small
         spinner.isDisplayedWhenStopped = false
-        textField = title
         favicon.imageScaling = .scaleProportionallyUpOrDown
         speaker.image = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "Playing audio")?
             .withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
@@ -1439,6 +1438,20 @@ final class TabCell: NSTableCellView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    private var isUnloaded = false
+
+    // The title isn't the cell's `textField`: a source list would pass it the
+    // selected row's style, which draws it bold. The accent pill is enough.
+    override var backgroundStyle: NSView.BackgroundStyle {
+        didSet { updateTitleColor() }
+    }
+
+    private func updateTitleColor() {
+        let selected = backgroundStyle == .emphasized
+        title.textColor = selected ? .alternateSelectedControlTextColor
+            : isUnloaded ? .secondaryLabelColor : .labelColor
+    }
+
     static let placeholder: NSImage? = {
         let image = NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
         return image?.withSymbolConfiguration(.init(paletteColors: [.tertiaryLabelColor]))
@@ -1447,7 +1460,8 @@ final class TabCell: NSTableCellView {
     func show(_ tab: Tab) {
         title.stringValue = tab.title
         // Unloaded tabs are dimmed; they load again when clicked.
-        title.textColor = tab.isUnloaded ? .secondaryLabelColor : .labelColor
+        isUnloaded = tab.isUnloaded
+        updateTitleColor()
         favicon.image = tab.icon ?? Self.placeholder
         favicon.alphaValue = tab.isUnloaded ? 0.5 : 1
         toolTip = tab.url?.absoluteString
