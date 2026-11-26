@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<!-- Twinkle's AppleScript dictionary (Scripting.swift). Every tab's address
+     and title can be read; tabs can be opened, changed, closed and scripted
+     only in containers with "appleScriptEnabled": true in settings.json, and
+     in temporary containers a script made. -->
+<dictionary title="Twinkle Terminology" xmlns:xi="http://www.w3.org/2003/XInclude">
+	<xi:include href="file:///System/Library/ScriptingDefinitions/CocoaStandard.sdef" xpointer="xpointer(/dictionary/suite)"/>
+
+	<suite name="Twinkle Suite" code="Twnk" description="Tabs, and scripting pages in containers that allow it.">
+		<class-extension extends="window" description="A Twinkle window.">
+			<element type="tab" access="r">
+				<cocoa key="scriptTabs"/>
+			</element>
+			<property name="active tab" code="Tact" type="tab" access="r" description="The tab in front.">
+				<cocoa key="scriptActiveTab"/>
+			</property>
+		</class-extension>
+
+		<class name="tab" code="Ttab" plural="tabs" description="A tab: one page, in one container.">
+			<cocoa class="TwinkleTab"/>
+			<property name="id" code="ID  " type="text" access="r" description="Stays the same for as long as the tab is open.">
+				<cocoa key="scriptID"/>
+			</property>
+			<property name="URL" code="pURL" type="text" description="The page's address. Setting it loads that address; only in a container that allows AppleScript.">
+				<cocoa key="scriptURL"/>
+			</property>
+			<property name="title" code="Ttit" type="text" access="r" description="The page's title.">
+				<cocoa key="scriptTitle"/>
+			</property>
+			<property name="name" code="pnam" type="text" access="r" description="The page's title (as in Safari).">
+				<cocoa key="scriptTitle"/>
+			</property>
+			<property name="container" code="Tcon" type="text" access="r" description="The container's name, or empty for no container.">
+				<cocoa key="scriptContainer"/>
+			</property>
+			<property name="loading" code="Tlod" type="boolean" access="r" description="Is the page still loading?">
+				<cocoa key="scriptLoading"/>
+			</property>
+			<responds-to command="close">
+				<cocoa method="handleCloseScriptCommand:"/>
+			</responds-to>
+		</class>
+
+		<command name="new tab" code="TwnkNTab" description="Opens a tab in the background, in a container that allows AppleScript, or by default in a new temporary container.">
+			<cocoa class="TwinkleNewTabCommand"/>
+			<direct-parameter type="text" description="The address to open."/>
+			<parameter name="in container" code="Tcon" type="text" optional="yes" description="An AppleScript-enabled container's name, or a temporary container a script made (like &quot;Temporary 2&quot;), to share its cookies.">
+				<cocoa key="container"/>
+			</parameter>
+			<result type="tab"/>
+		</command>
+
+		<command name="do JavaScript" code="TwnkDoJS" description="Runs JavaScript in a tab's page, as the body of an async function: return the result; await works. Only in a container that allows AppleScript.">
+			<cocoa class="TwinkleDoJavaScriptCommand"/>
+			<direct-parameter type="text" description="The script."/>
+			<parameter name="in" code="Ttab" type="tab" description="The tab.">
+				<cocoa key="tab"/>
+			</parameter>
+			<result type="any" description="Text, a number, a boolean, or JSON text for anything else."/>
+		</command>
+	</suite>
+</dictionary>

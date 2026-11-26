@@ -13,6 +13,7 @@
 #   ./debug.sh mouse <button>           click a mouse button mid-window (3 back, 4 forward)
 #   ./debug.sh mouse "left <x> <y>"     left-click at x, y points from the window's top left
 #   ./debug.sh appearance <light|dark|system>   for screenshots of both
+#   ./debug.sh applescript <script>     run AppleScript inside a tell to Twinkle, print the result
 # Writes state.json, window.png, page.png (switcher.png while the ⌃Tab list is up) to Twinkle's folder in its sandbox
 # container (~/Library/Containers/dev.twinkle.Twinkle/…/Twinkle/debug/).
 # TWINKLE_PROFILE=<folder> ./debug.sh … drives the Twinkle started with
@@ -32,6 +33,13 @@ tool=.build/post-notification
 [[ -x "$tool" && "$tool" -nt scripts/post-notification.swift ]] || swiftc -o "$tool" scripts/post-notification.swift
 if [[ "${1:-}" == "open" ]]; then
   "$tool" "dev.twinkle.debug.open$suffix" "$2"$'\t'"${3:-}"
+  exit 0
+fi
+if [[ "${1:-}" == "applescript" ]]; then
+  rm -f "$dir/applescript.txt"
+  "$tool" "dev.twinkle.debug.applescript$suffix" "$2"
+  for _ in $(seq 1 40); do [[ -f "$dir/applescript.txt" ]] && break; sleep 0.25; done
+  cat "$dir/applescript.txt"
   exit 0
 fi
 if [[ "${1:-}" =~ ^(select|type|key|press|action|mouse|appearance)$ ]]; then

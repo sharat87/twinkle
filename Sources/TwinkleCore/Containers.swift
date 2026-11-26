@@ -14,15 +14,21 @@ public struct Container: Codable, Equatable, Identifiable, Sendable {
     /// Sites that always open in this container, like Firefox's "Always Open
     /// in". An entry covers its subdomains.
     public var sites: [String]
+    /// AppleScript may open, change, close and run JavaScript in this
+    /// container's tabs. Other containers' tabs only show their address and
+    /// title to scripts.
+    public var appleScriptEnabled: Bool
 
-    public init(id: UUID = UUID(), name: String, color: String, sites: [String] = []) {
+    public init(id: UUID = UUID(), name: String, color: String, sites: [String] = [],
+                appleScriptEnabled: Bool = false) {
         self.id = id
         self.name = name
         self.color = color
         self.sites = sites
+        self.appleScriptEnabled = appleScriptEnabled
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, color, sites }
+    enum CodingKeys: String, CodingKey { case id, name, color, sites, appleScriptEnabled }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -30,6 +36,7 @@ public struct Container: Codable, Equatable, Identifiable, Sendable {
         name = try c.decode(String.self, forKey: .name)
         color = try c.decodeIfPresent(String.self, forKey: .color) ?? ContainerList.palette[0]
         sites = try c.decodeIfPresent([String].self, forKey: .sites) ?? []
+        appleScriptEnabled = try c.decodeIfPresent(Bool.self, forKey: .appleScriptEnabled) ?? false
     }
 }
 

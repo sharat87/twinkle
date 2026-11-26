@@ -81,6 +81,7 @@ cp "$bin" "$app/Contents/MacOS/Twinkle"
 vtool -set-build-version macos 14.0 "$(xcrun --show-sdk-version)" -replace \
   -output "$app/Contents/MacOS/Twinkle" "$app/Contents/MacOS/Twinkle"
 cp Resources/Info.plist "$app/Contents/Info.plist"
+cp Resources/Twinkle.sdef "$app/Contents/Resources/Twinkle.sdef"
 # The icon is drawn by a script; redrawn only when the script changes.
 icon=.build/AppIcon.icns
 [[ -f "$icon" && "$icon" -nt scripts/make-icon.swift ]] || swift scripts/make-icon.swift "$icon"

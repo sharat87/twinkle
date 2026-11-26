@@ -17,6 +17,7 @@ protocol TabHost: AnyObject {
 /// One tab: a web view in one container. The web view is made on first
 /// display, so tabs restored from the last session cost nothing until clicked.
 @MainActor
+@objc(TwinkleTab)
 final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// Saved with the session.
     let id: UUID
@@ -377,9 +378,11 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     /// The container `url` should open in instead of this tab's, if any.
     /// Only plain page loads move: not form posts, reloads or back/forward,
-    /// and not pop-ups or sites you put in this container yourself.
+    /// and not pop-ups or sites you put in this container yourself. Nor
+    /// does anything in a container AppleScript may drive, so a script's
+    /// pages never land in a container it can't reach.
     private func assignedElsewhere(_ url: URL, action: WKNavigationAction) -> UUID? {
-        guard !isPopup, ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+        guard !isPopup, !AppState.shared.allowsAppleScript(containerID), ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
               (action.request.httpMethod ?? "GET").uppercased() == "GET",
               ![.backForward, .reload, .formResubmitted, .formSubmitted].contains(action.navigationType),
               let assignment = AppState.shared.assignment(forHost: url.host()),

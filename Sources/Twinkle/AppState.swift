@@ -228,6 +228,24 @@ final class AppState {
     private(set) var temporaries: [Container] = []
     private var temporaryCount = 0
 
+    /// Temporary containers made by AppleScript's `new tab`, which scripts
+    /// may use; your own temporary containers stay out of their reach.
+    private(set) var scriptTemporaries: Set<UUID> = []
+
+    func newScriptTemporaryContainer() -> Container {
+        let container = newTemporaryContainer()
+        scriptTemporaries.insert(container.id)
+        return container
+    }
+
+    /// AppleScript may open, change, close and run JavaScript in this
+    /// container's tabs: `appleScriptEnabled` in settings.json, or a
+    /// temporary container a script made.
+    func allowsAppleScript(_ id: UUID?) -> Bool {
+        guard let id else { return false }
+        return scriptTemporaries.contains(id) || containers.first { $0.id == id }?.appleScriptEnabled == true
+    }
+
     func newTemporaryContainer() -> Container {
         temporaryCount += 1
         let container = Container(name: "Temporary \(temporaryCount)", color: "#8E8E93")
@@ -243,6 +261,7 @@ final class AppState {
     /// Forgets a temporary container, and with it its data store.
     func releaseTemporary(_ id: UUID) {
         temporaries.removeAll { $0.id == id }
+        scriptTemporaries.remove(id)
         stores[id] = nil
     }
 

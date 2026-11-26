@@ -13,7 +13,7 @@ A minimal web browser for macOS, built on the system's WebKit. Vibed just for my
 - **Everything is in the menu bar.** No command palette, no toolbar buttons. For a fuzzy finder, use one for menu items, like Alfred or Raycast.
 - **Shortcuts are changed in macOS**, under System Settings › Keyboard › Keyboard Shortcuts › App Shortcuts, as for any menu item.
 - **No dev tools of its own.** Inspect Element opens Safari's Web Inspector.
-- **No MCP.** Once AppleScript support is added, ask your agent to write AppleScript.
+- **No MCP.** Ask your agent to write AppleScript (see below); it only gets the containers you let it have.
 - **Permissions are always denied.** Camera, microphone and screen capture are refused without asking. Location and web notifications aren't implemented at all.
 
 <img alt="Twinkle's Tools menu open over a GitHub page: every action is a menu item, and the address field is in Monaco so look-alike letters stand apart" src="docs/screenshot-menus.png" width="751">
@@ -132,6 +132,28 @@ They're the `containers` list in settings.json: `id` (keys the cookie jar; keep 
 ```
 
 A site covers its subdomains, and the most specific entry wins: here `mail.example.com` opens in Work and the rest of `example.com` in Personal. Tools › Always Open This Site In sets it from the menu. A link or redirect to an assigned site moves to its container: a fresh tab is replaced, a tab with history keeps its page and the site opens beside it. Form posts, reloads, back/forward and pop-ups (sign-in windows talk to their opener) never move. Nor does a tab you put somewhere yourself with Reopen in Container, Duplicate, Reopen Closed Tab or a restored session.
+
+### AppleScript
+
+Any tab's address and title can be read, Chromium-style, which is what launchers like Alfred ask for:
+
+```applescript
+tell application "Twinkle" to get {URL, title} of active tab of front window
+```
+
+Everything else (opening tabs, setting a tab's `URL`, `close`, `do JavaScript`) works only in containers with `"appleScriptEnabled": true` in settings.json, and in temporary containers a script made. A script can't touch your other containers' pages or cookies, and sites assigned to other containers don't pull its tabs out.
+
+```applescript
+tell application "Twinkle"
+  set t to new tab "https://example.com"                 -- a new temporary container
+  set u to new tab "https://example.org" in container "Agent"
+  do JavaScript "return document.title" in t             -- an async function body: return, await
+  set URL of t to "https://example.net"
+  close t
+end tell
+```
+
+`new tab` opens in the background. `do JavaScript` runs in the page and returns text, numbers and booleans as they are, anything else as JSON text; pages' Content Security Policies don't apply. macOS asks once per app (Terminal, your agent) before it may script Twinkle.
 
 ## Keys
 

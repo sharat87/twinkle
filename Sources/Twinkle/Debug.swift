@@ -146,6 +146,29 @@ enum Debug {
                     : value == "light" ? NSAppearance(named: .aqua) : nil
             }
         }
+        // `./debug.sh applescript <script>`: runs the script inside a `tell`
+        // to Twinkle itself and writes the result (or error) to
+        // applescript.txt. Events an app sends itself skip the Automation
+        // consent an outside sender needs, so the dictionary can be tested
+        // from the shell. It runs on a thread of its own, so the main thread
+        // stays free as it would for an outside sender (do JavaScript
+        // waits on it).
+        DistributedNotificationCenter.default().addObserver(forName: name("applescript"), object: nil, queue: .main) { note in
+            let source = note.object as? String ?? ""
+            let id = Bundle.main.bundleIdentifier ?? "dev.twinkle.Twinkle"
+            let file = MainActor.assumeIsolated {
+                AppState.shared.files.directory.appendingPathComponent("debug", isDirectory: true)
+            }
+            Thread.detachNewThread {
+                var error: NSDictionary?
+                let result = NSAppleScript(source: "tell application id \"\(id)\"\n\(source)\nend tell")?
+                    .executeAndReturnError(&error)
+                let text = error.map { "error: \($0[NSAppleScript.errorMessage] ?? $0)" } ?? result?.stringValue
+                    ?? (result.map { "\($0)" } ?? "")
+                try? FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+                try? (text + "\n").write(to: file.appendingPathComponent("applescript.txt"), atomically: true, encoding: .utf8)
+            }
+        }
         // `./debug.sh select <index>`
         DistributedNotificationCenter.default().addObserver(forName: selectNotification, object: nil, queue: .main) { note in
             let index = Int(note.object as? String ?? "") ?? -1
