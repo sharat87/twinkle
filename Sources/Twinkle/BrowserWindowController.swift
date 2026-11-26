@@ -136,7 +136,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     // MARK: Building the window
 
     private func makeSidebar() -> NSView {
-        let root = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 240, height: 800))
+        let root = SidebarView(frame: NSRect(x: 0, y: 0, width: 240, height: 800))
         root.material = .sidebar
         root.blendingMode = .behindWindow
         root.state = .followsWindowActiveState
@@ -1633,6 +1633,13 @@ final class TabRowView: NSTableRowView {
 }
 
 /// The tab list: a middle click on a tab closes it.
+/// The sidebar's background: dragging it moves the window.
+final class SidebarView: NSVisualEffectView {
+    override func mouseDown(with event: NSEvent) {
+        if let window { window.performDrag(with: event) } else { super.mouseDown(with: event) }
+    }
+}
+
 final class TabTableView: NSTableView {
     var onMiddleClick: ((Int) -> Void)?
     var onMouseDown: ((Int) -> Void)?
@@ -1641,6 +1648,11 @@ final class TabTableView: NSTableView {
     /// (a table that allows dragging normally waits for mouse-up).
     override func mouseDown(with event: NSEvent) {
         let row = self.row(at: convert(event.locationInWindow, from: nil))
+        // The blank space around and below the tabs moves the window, as
+        // the title bar would.
+        if row < 0, !event.modifierFlags.contains(.control), let window {
+            return window.performDrag(with: event)
+        }
         if row >= 0, !event.modifierFlags.contains(.control) { onMouseDown?(row) }
         super.mouseDown(with: event)
     }
