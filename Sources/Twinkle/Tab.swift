@@ -443,6 +443,9 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
             statusCode = responseStatus
         }
         responseStatus = nil
+        // The title saved for an unloaded or restored tab was the old page's:
+        // a page without a <title> shows its host, not that.
+        savedTitle = ""
         if !showingErrorPage {
             clearTLSError()
             if let url = webView.url {
