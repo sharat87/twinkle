@@ -2,6 +2,58 @@ import AppKit
 import TwinkleCore
 import WebKit
 
+@MainActor
+private final class TwinkleWebView: WKWebView {
+    var contextMenuFrameURL: URL?
+    var onOpenFrameInNewTab: ((URL) -> Void)?
+
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        super.willOpenMenu(menu, with: event)
+        guard contextMenuFrameURL != nil else { return }
+        let action = #selector(openFrameInNewTab(_:))
+        guard !menu.items.contains(where: { $0.action == action }) else { return }
+
+        let item = NSMenuItem(title: "Open Frame in New Tab", action: action, keyEquivalent: "")
+        item.target = self
+        if !menu.items.isEmpty { menu.addItem(.separator()) }
+        menu.addItem(item)
+    }
+
+    override func didCloseMenu(_ menu: NSMenu, with event: NSEvent?) {
+        super.didCloseMenu(menu, with: event)
+        contextMenuFrameURL = nil
+    }
+
+    @objc private func openFrameInNewTab(_ sender: Any?) {
+        guard let contextMenuFrameURL else { return }
+        onOpenFrameInNewTab?(contextMenuFrameURL)
+    }
+}
+
+@MainActor
+private final class FrameContextMenuHandler: NSObject, WKScriptMessageHandler {
+    weak var webView: TwinkleWebView?
+
+    init(webView: TwinkleWebView) {
+        self.webView = webView
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let webView, message.webView === webView else { return }
+        guard !message.frameInfo.isMainFrame else {
+            webView.contextMenuFrameURL = nil
+            return
+        }
+
+        let url = message.frameInfo.request.url
+        let allowedSchemes: Set<String> = ["http", "https", "file", "about", "data", "blob"]
+        webView.contextMenuFrameURL = url.flatMap {
+            guard let scheme = $0.scheme?.lowercased(), allowedSchemes.contains(scheme) else { return nil }
+            return $0
+        }
+    }
+}
+
 /// What a tab needs from its window.
 @MainActor
 protocol TabHost: AnyObject {
@@ -299,7 +351,23 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         JSONViewer.install(config.userContentController)
         PageStyle.install(config.userContentController)
 
-        let webView = WKWebView(frame: .zero, configuration: config)
+        let webView = TwinkleWebView(frame: .zero, configuration: config)
+        let handlerName = "twinkleFrameContextMenu_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+        let controller = config.userContentController
+        controller.add(FrameContextMenuHandler(webView: webView), name: handlerName)
+        controller.addUserScript(WKUserScript(
+            source: """
+                window.addEventListener("contextmenu", function () {
+                    window.webkit.messageHandlers["\(handlerName)"].postMessage(null);
+                }, true);
+                """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        ))
+        webView.onOpenFrameInNewTab = { [weak self] url in
+            guard let self else { return }
+            self.host?.tab(self, open: url, inBackground: false)
+        }
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
