@@ -116,7 +116,6 @@ final class AppState {
     /// Reads settings.json again if it changed on disk. A missing file is
     /// written out with defaults so there is something to edit.
     func reload() {
-        mergeContainersFile()
         if !files.exists(Self.settingsFile) { try? files.save(SettingsFile(), to: Self.settingsFile) }
 
         let date = files.modificationDate(Self.settingsFile)
@@ -143,24 +142,6 @@ final class AppState {
         if list != containers {
             containers = list
             NotificationCenter.default.post(name: .containersChanged, object: nil)
-        }
-    }
-
-    /// Containers used to have a file of their own. Its list moves into
-    /// settings.json (unless that has one already) and the file goes.
-    private func mergeContainersFile() {
-        let old = "containers.json"
-        guard files.exists(old) else { return }
-        do {
-            let list = try files.load(ContainerList.self, from: old)?.containers ?? []
-            var file = try files.load(SettingsFile.self, from: Self.settingsFile) ?? SettingsFile()
-            if file.containers == nil {
-                file.containers = list
-                try files.save(file, to: Self.settingsFile)
-            }
-            try FileManager.default.removeItem(at: files.url(old))
-        } catch {
-            Status.show("Couldn't move containers.json into settings.json: \(Self.describe(error))", sticky: true)
         }
     }
 
