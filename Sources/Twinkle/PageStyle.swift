@@ -1,7 +1,7 @@
 import WebKit
 
 /// Twinkle's own CSS for every page and frame: thin scrollbars, drawn in the
-/// element's text colour on a transparent track.
+/// element's text colour at 70% opacity on a transparent track.
 ///
 /// It goes in as a WebKit user stylesheet, which the page can't see or
 /// remove and which a Content-Security-Policy doesn't block. WebKit only has
@@ -11,7 +11,7 @@ enum PageStyle {
     static let css = """
     * {
       scrollbar-width: thin !important;
-      scrollbar-color: currentColor transparent !important;
+      scrollbar-color: color-mix(in srgb, currentColor 70%, transparent) transparent !important;
     }
     """
 
