@@ -49,6 +49,8 @@ Twinkle › Restart Twinkle quits and opens the app again, so a rebuild with `./
 
 `--profile <folder>` runs a separate Twinkle that keeps everything in that folder, with its own cookies and filter lists, for testing without touching your own: `./build.sh release run --profile <folder>`. The sandbox only allows profile folders under `/tmp`.
 
+`--unsafe` (only with `--profile`) builds `build/Twinkle Unsafe.app` instead, ad-hoc signed so no password is asked for: handy for agents and scripts. It's still sandboxed, but as a different app (`dev.twinkle.Twinkle.unsafe`) with its own container, so it can't reach your Twinkle's cookies or data, and it won't start without a profile.
+
 ## Files
 
 Everything lives in Twinkle's sandbox container, in `~/Library/Containers/dev.twinkle.Twinkle/Data/Library/Application Support/Twinkle/`. The first time another app (your text editor, say) opens one of these, macOS asks whether it may access Twinkle's data. An unsandboxed Twinkle's files, from `~/Library/Application Support/Twinkle/` and `~/Library/WebKit/dev.twinkle.Twinkle/`, are moved in at the first sandboxed launch.

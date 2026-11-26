@@ -4,8 +4,20 @@ import Security
 /// Twinkle refuses to run unless it's sandboxed and signed with a real
 /// identity: without both, macOS doesn't keep its container (cookies, site
 /// data, history) from other apps. Checked before anything is read or written.
+///
+/// The one exception is the unsafe test build (`./build.sh --unsafe`):
+/// ad-hoc signed so building needs no keychain password, but under its own
+/// bundle identifier, so it has its own container and never sees the usual
+/// Twinkle's, and only with a test profile.
 enum Integrity {
-    static func problem() -> String? {
+    static let unsafeBundleID = "dev.twinkle.Twinkle.unsafe"
+
+    static var isUnsafeBuild: Bool { Bundle.main.bundleIdentifier == unsafeBundleID }
+
+    @MainActor static func problem() -> String? {
+        if isUnsafeBuild && AppState.profileArgument() == nil {
+            return "This is the unsafe test build of Twinkle, which only runs with a test profile (./build.sh release run --unsafe --profile <folder>)."
+        }
         if ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] == nil {
             return "This copy of Twinkle isn't sandboxed."
         }
@@ -22,6 +34,7 @@ enum Integrity {
             return "Twinkle can't read its own signature."
         }
         let flags = (dict[kSecCodeInfoFlags as String] as? UInt32) ?? 0
+        if isUnsafeBuild { return nil }
         if flags & SecCodeSignatureFlags.adhoc.rawValue != 0 || (dict[kSecCodeInfoCertificates as String] as? [Any] ?? []).isEmpty {
             return "This copy of Twinkle has an ad-hoc signature."
         }

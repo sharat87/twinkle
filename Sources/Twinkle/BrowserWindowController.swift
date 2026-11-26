@@ -219,7 +219,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         addressField.isBordered = false
         addressField.drawsBackground = false
         addressField.focusRingType = .none
-        addressField.font = UI.font
+        addressField.font = NSFont(name: "Monaco", size: UI.textSize - 2) ?? .monospacedSystemFont(ofSize: UI.textSize - 2, weight: .regular)
         addressField.lineBreakMode = .byTruncatingTail
         addressField.usesSingleLineMode = true
         addressField.cell?.isScrollable = true
