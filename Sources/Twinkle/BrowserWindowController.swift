@@ -46,6 +46,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     private var addressRowLeading: NSLayoutConstraint!
     private var pageTop: NSLayoutConstraint!
     private let progressBar = NSView()
+    /// The address of the link under the pointer, bottom left of the page.
+    private let linkLabel = NSTextField(labelWithString: "")
+    private let linkBox = NSView()
     private var progressWidth: NSLayoutConstraint!
     private var findBarHeight: NSLayoutConstraint!
     private let findBar = NSStackView()
@@ -319,6 +322,22 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         root.addSubview(progressBar)
         progressWidth = progressBar.widthAnchor.constraint(equalToConstant: 0)
 
+        linkLabel.font = NSFont(name: "Monaco", size: 12) ?? .monospacedSystemFont(ofSize: 12, weight: .regular)
+        linkLabel.lineBreakMode = .byTruncatingMiddle
+        linkLabel.textColor = .labelColor
+        linkLabel.translatesAutoresizingMaskIntoConstraints = false
+        linkLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        linkBox.wantsLayer = true
+        linkBox.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        linkBox.layer?.borderWidth = 1
+        linkBox.layer?.borderColor = NSColor.separatorColor.cgColor
+        linkBox.layer?.cornerRadius = 5
+        linkBox.layer?.maskedCorners = [.layerMaxXMaxYCorner]  // top right; the others sit on the page's edges
+        linkBox.isHidden = true
+        linkBox.translatesAutoresizingMaskIntoConstraints = false
+        linkBox.addSubview(linkLabel)
+        root.addSubview(linkBox)
+
         addressRowCenter = addressRow.centerYAnchor.constraint(equalTo: root.topAnchor, constant: 20)
         addressRowLeading = addressRow.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 80)
         pageTop = findBar.topAnchor.constraint(equalTo: root.topAnchor, constant: 40)
@@ -338,6 +357,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             progressBar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             progressBar.heightAnchor.constraint(equalToConstant: 2),
             progressWidth,
+            linkBox.leadingAnchor.constraint(equalTo: pageArea.leadingAnchor, constant: -1),
+            linkBox.bottomAnchor.constraint(equalTo: pageArea.bottomAnchor, constant: 1),
+            linkBox.widthAnchor.constraint(lessThanOrEqualTo: pageArea.widthAnchor, multiplier: 0.6),
+            linkLabel.leadingAnchor.constraint(equalTo: linkBox.leadingAnchor, constant: 8),
+            linkLabel.trailingAnchor.constraint(equalTo: linkBox.trailingAnchor, constant: -8),
+            linkLabel.topAnchor.constraint(equalTo: linkBox.topAnchor, constant: 4),
+            linkLabel.bottomAnchor.constraint(equalTo: linkBox.bottomAnchor, constant: -4),
         ])
         return root
     }
@@ -399,6 +425,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
         selected = index
         if changed {
+            showLink(nil)
             pageArea.subviews.forEach { $0.removeFromSuperview() }
             if let webView = tab.viewForDisplay() {
                 webView.frame = pageArea.bounds
@@ -547,6 +574,15 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         refreshContainerIndicators()
         if row == selected { updateChrome() }
         scheduleSave()
+    }
+
+    func tab(_ tab: Tab, hoversLink url: URL?) {
+        if tab === current { showLink(url) }
+    }
+
+    private func showLink(_ url: URL?) {
+        linkLabel.stringValue = url?.absoluteString ?? ""
+        linkBox.isHidden = url == nil
     }
 
     func tab(_ tab: Tab, open url: URL, inBackground: Bool) {

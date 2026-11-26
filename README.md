@@ -25,6 +25,7 @@ A minimal web browser for macOS, built on the system's WebKit. Vibed just for my
 - **Temporary containers**: a throwaway cookie jar, kept only in memory and gone when its last tab closes.
 - **Idle tabs unload** after 30 minutes in the background, freeing their memory, and come back with their history when clicked. Tabs playing sound or holding a half-filled form are left alone.
 - **The address in full, in Monaco**, a monospaced font, so look-alike letters (`l`, `I`, `1`; `O`, `0`) can't pass for each other in a lookalike domain.
+- **A link's address while you point at it**, bottom left of the page, in Monaco like the address field.
 - **The response status beside the address**, like `200 OK`, orange for 4xx and red for 5xx. A padlock (or a certificate or mixed-content warning) sits before it.
 - **The page's host in the window title** (`Title (example.com)`), so KeePassXC auto-type matches sites without a browser extension.
 - **Ad and tracker blocking** with EasyList and EasyPrivacy (or any EasyList/uBlock-syntax list, or hosts file), compiled into WebKit content blockers that run before requests are made.

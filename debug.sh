@@ -12,6 +12,7 @@
 #   ./debug.sh action <selector:>        run a menu command
 #   ./debug.sh mouse <button>           click a mouse button mid-window (3 back, 4 forward)
 #   ./debug.sh mouse "left <x> <y>"     left-click at x, y points from the window's top left
+#   ./debug.sh mouse "move <x> <y>"     move the mouse there (link hovering), same points
 #   ./debug.sh appearance <light|dark|system>   for screenshots of both
 #   ./debug.sh applescript <script>     run AppleScript inside a tell to Twinkle, print the result
 # Writes state.json, window.png, page.png (switcher.png while the ⌃Tab list is up) to Twinkle's folder in its sandbox

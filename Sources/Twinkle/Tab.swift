@@ -12,6 +12,8 @@ protocol TabHost: AnyObject {
     func tabWantsClose(_ tab: Tab)
     /// The tab tried to go to a site that always opens in another container.
     func tab(_ tab: Tab, open url: URL, inAssigned container: UUID)
+    /// The link under the pointer changed; nil when it's off a link.
+    func tab(_ tab: Tab, hoversLink url: URL?)
 }
 
 /// One tab: a web view in one container. The web view is made on first
@@ -586,6 +588,14 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     func webView(_ webView: WKWebView, saveDataToFile data: Data, suggestedFilename: String,
                  mimeType: String?, originatingURL: URL?) {
         Downloads.shared.save(data, suggestedFilename: suggestedFilename, source: originatingURL, page: webView.url)
+    }
+
+    /// The link under the pointer, as WebKit tells Safari for its status
+    /// bar. WKUIDelegate SPI; the hit test result is a `_WKHitTestResult`.
+    @objc(_webView:mouseDidMoveOverElement:withFlags:userInfo:)
+    func webView(_ webView: WKWebView, mouseDidMoveOverElement hit: NSObject?,
+                 withFlags flags: NSEvent.ModifierFlags, userInfo: NSObject?) {
+        host?.tab(self, hoversLink: hit?.value(forKey: "absoluteLinkURL") as? URL)
     }
 
     func webViewDidClose(_ webView: WKWebView) {

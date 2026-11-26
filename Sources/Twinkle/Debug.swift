@@ -92,6 +92,15 @@ enum Debug {
                     }
                     return
                 }
+                if words.first == "move", words.count == 3, let x = Double(words[1]), let y = Double(words[2]) {
+                    let point = NSPoint(x: x, y: window.frame.height - y)
+                    if let event = NSEvent.mouseEvent(
+                        with: .mouseMoved, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) {
+                        NSApp.postEvent(event, atStart: false)
+                    }
+                    return
+                }
                 let button = Int(words.first ?? "") ?? 3
                 let point = NSPoint(x: view.bounds.midX, y: view.bounds.midY)
                 for type in [NSEvent.EventType.otherMouseDown, .otherMouseUp] {
