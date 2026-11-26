@@ -63,6 +63,7 @@ Everything lives in Twinkle's sandbox container, in `~/Library/Containers/dev.tw
 |---|---|
 | `settings.json` | Search engine, downloads folder, filter lists, your containers, and settings per domain (`zoom`, `adBlockingOff`, `container`). Missing keys take defaults. |
 | `session.json` | Open tabs, restored at launch. |
+| `tab-history/` | Each open tab's back/forward list (with scroll positions and form contents), one file per tab named by its id in `session.json`, so tabs come back with their Back and Forward. |
 | `filters/custom.txt` | Your own filter rules. |
 | `filters/cache/` | Downloaded filter lists. |
 | `bookmarks.json` | Bookmarks (from Safari), searched by the address bar. |
@@ -162,7 +163,7 @@ end tell
 | | |
 |---|---|
 | `⌘T` new tab (same container) · `⌃⌘0` new tab, no container · `⌃⌘1`–`9` new tab in container · `⌥⌘T` new temporary container | `⌘W` close · `⇧⌘T` reopen closed tab |
-| `⌘L` address · `⌘F` find · `⌘G` / `⇧⌘G` next / previous | `⌘[` / `⌘]` back / forward · `⌘R` reload · `⌥⌘R` reload from origin |
+| `⌘L` address · `⌘F` find · `⌘G` / `⇧⌘G` next / previous | `⌘[` / `⌘]` back / forward · `⌘E` the tab's back/forward list (↑/↓ and Return, or click) · `⌘R` reload · `⌥⌘R` reload from origin |
 | `⌃Tab` recently used tabs (hold `⌃`, tap Tab to go further back, `⇧` reverses, Escape cancels) · `⇧⌘]` / `⇧⌘[` next / previous tab · `⌘1`–`⌘9` jump · `⇧⌘↑` / `⇧⌘↓` move tab up / down | `⌘+` (or `⌘=`) / `⌘-` / `⌘0` zoom, remembered per site · `⌃⌘S` tab list · `⇧⌘N` new container |
 | `⌥⇧⌘⌫` clear cookies and data for this site (Tools menu): everything the tab's container holds for the site, then a reload. For sign-ins that get stuck, like AWS. | |
 

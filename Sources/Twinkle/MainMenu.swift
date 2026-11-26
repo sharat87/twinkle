@@ -80,6 +80,7 @@ enum MainMenu {
         main.addItem(submenu("History", [
             item("Back", #selector(BrowserWindowController.goBack(_:)), "["),
             item("Forward", #selector(BrowserWindowController.goForward(_:)), "]"),
+            item("Show Tab History", #selector(BrowserWindowController.showTabHistory(_:)), "e"),
             item("Follow Link…", #selector(BrowserWindowController.followLink(_:)), "i"),
             .separator(),
             item("Bookmark This Page", #selector(BrowserWindowController.bookmarkPage(_:)), "d"),

@@ -67,10 +67,13 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// Why the last unload check kept the tab, for debug.sh.
     private(set) var unloadCheck = ""
 
-    init(url: URL?, title: String = "", container: UUID?, host: TabHost, id: UUID = UUID()) {
+    /// `history`: a back/forward list saved by `history` below, restored
+    /// when the tab first loads.
+    init(url: URL?, title: String = "", container: UUID?, host: TabHost, id: UUID = UUID(), history: Data? = nil) {
         self.id = id
         self.pendingURL = url
         self.savedTitle = title
+        self.unloadedState = history
         self.containerID = container
         self.host = host
         self.isPopup = false
@@ -138,6 +141,10 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard let url, let scheme = url.scheme?.lowercased(), ["http", "https", "file"].contains(scheme) else { return nil }
         return SavedTab(id: id, url: url.absoluteString, title: title, container: containerID)
     }
+
+    /// The back/forward list (with scroll positions and form state), in
+    /// WebKit's own encoding, for keeping across launches.
+    var history: Data? { (webView?.interactionState ?? unloadedState) as? Data }
 
     // MARK: Loading
 

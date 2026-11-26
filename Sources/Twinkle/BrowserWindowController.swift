@@ -24,7 +24,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     private(set) var tabs: [Tab] = []
     private var selected = -1
-    private var closedTabs: [(tab: SavedTab, temporary: Bool)] = []
+    private var closedTabs: [(tab: SavedTab, temporary: Bool, history: Data?)] = []
     private var unloadTimer: Timer?
 
     private let split = NSSplitViewController()
@@ -371,13 +371,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     /// unless `exempt` (the tab is going where you put it yourself).
     @discardableResult
     func openTab(url: URL?, container: UUID?, at index: Int? = nil, select: Bool = true, title: String = "",
-                 exempt: Bool = false) -> Tab {
+                 exempt: Bool = false, history: Data? = nil) -> Tab {
         var container = container
         var exemptSite: String?
         if let assignment = AppState.shared.assignment(forHost: url?.host()), assignment.container.id != container {
             if exempt { exemptSite = assignment.site } else { container = assignment.container.id }
         }
-        let tab = Tab(url: url, title: title, container: container, host: self)
+        let tab = Tab(url: url, title: title, container: container, host: self, history: history)
         tab.exemptSite = exemptSite
         let at = min(index ?? tabs.count, tabs.count)
         tabs.insert(tab, at: at)
@@ -430,7 +430,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         for tab in closing {
             let temporary = AppState.shared.isTemporary(tab.containerID)
             if let saved = tab.saved {
-                closedTabs.append((saved, temporary))
+                closedTabs.append((saved, temporary, tab.history))
                 if closedTabs.count > 50 { closedTabs.removeFirst() }
             }
             tab.close()
@@ -775,6 +775,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             }
             updateChrome()
         }
+        s.goTo = { [unowned self] item in
+            guard let tab = current, let webView = tab.webView else { return }
+            addressField.stringValue = item.url.absoluteString
+            webView.go(to: item)
+            window?.makeFirstResponder(tab.pageResponder)
+            updateChrome()
+        }
         s.switchTo = { [unowned self] tab in
             addressField.stringValue = tab.url?.absoluteString ?? ""
             if let i = index(of: tab) { select(i) }
@@ -981,13 +988,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     @objc func reopenClosedTab(_ sender: Any?) {
-        guard let (saved, temporary) = closedTabs.popLast(), let url = URL(string: saved.url) else { return }
+        guard let (saved, temporary, history) = closedTabs.popLast(), let url = URL(string: saved.url) else { return }
         // A closed temporary container's data is gone; a new one stands in.
         var container = saved.container
         if temporary, AppState.shared.container(container) == nil {
             container = AppState.shared.newTemporaryContainer().id
         }
-        openTab(url: url, container: container, at: selected + 1, title: saved.title, exempt: true)
+        openTab(url: url, container: container, at: selected + 1, title: saved.title, exempt: true, history: history)
     }
 
     /// A link from another app switches to a tab already showing it, like
@@ -1031,6 +1038,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     @objc func goForward(_ sender: Any?) {
         current?.webView?.goForward()
+    }
+
+    /// The tab's back/forward list, under the address field.
+    @objc func showTabHistory(_ sender: Any?) {
+        guard let list = current?.webView?.backForwardList else { return }
+        focusAddress(nil)
+        suggestions.showHistory(list)
     }
 
     @objc func zoomIn(_ sender: Any?) {
@@ -1231,6 +1245,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         switch item.action {
         case #selector(goBack(_:)): return webView?.canGoBack ?? false
         case #selector(goForward(_:)): return webView?.canGoForward ?? false
+        case #selector(showTabHistory(_:)): return (webView?.canGoBack ?? false) || (webView?.canGoForward ?? false)
         case #selector(stopLoading(_:)): return webView?.isLoading ?? false
         case #selector(zoomIn(_:)), #selector(zoomOut(_:)), #selector(actualSize(_:)),
              #selector(reloadFromOrigin(_:)), #selector(findNext(_:)), #selector(findPrevious(_:)), #selector(showFind(_:)),
@@ -1363,7 +1378,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         let session = (try? AppState.shared.files.load(Session.self, from: AppState.sessionFile)) ?? nil
         for saved in session?.tabs ?? [] {
             guard let url = URL(string: saved.url) else { continue }
-            let tab = Tab(url: url, title: saved.title, container: saved.container, host: self, id: saved.id)
+            let history = try? Data(contentsOf: Self.historyFolder.appendingPathComponent(saved.id.uuidString))
+            writtenHistories[saved.id] = history
+            let tab = Tab(url: url, title: saved.title, container: saved.container, host: self, id: saved.id, history: history)
             // Restored where you left it, even if the site is assigned elsewhere.
             if let assignment = AppState.shared.assignment(forHost: url.host()), assignment.container.id != saved.container {
                 tab.exemptSite = assignment.site
@@ -1399,6 +1416,32 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             if !AppState.shared.isTemporary(tab.containerID), let s = tab.saved { saved.append(s) }
         }
         try? AppState.shared.files.save(Session(tabs: saved, selected: selectedSaved), to: AppState.sessionFile)
+        saveHistories(for: Set(saved.map(\.id)))
+    }
+
+    /// Each saved tab's back/forward list, one file per tab in
+    /// `tab-history/`, named by the tab's id in session.json.
+    static var historyFolder: URL { AppState.shared.files.url("tab-history") }
+    /// What's on disk, so unchanged lists aren't written again.
+    private var writtenHistories: [UUID: Data] = [:]
+
+    private func saveHistories(for ids: Set<UUID>) {
+        let folder = Self.historyFolder
+        let fm = FileManager.default
+        try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        for tab in tabs where ids.contains(tab.id) {
+            guard let data = tab.history, writtenHistories[tab.id] != data else { continue }
+            if (try? data.write(to: folder.appendingPathComponent(tab.id.uuidString), options: .atomic)) != nil {
+                writtenHistories[tab.id] = data
+            }
+        }
+        // Closed tabs' lists, and ones no longer saved (temporary containers).
+        for name in (try? fm.contentsOfDirectory(atPath: folder.path)) ?? [] {
+            let id = UUID(uuidString: name)
+            guard !(id.map(ids.contains) ?? false) else { continue }
+            try? fm.removeItem(at: folder.appendingPathComponent(name))
+            if let id { writtenHistories[id] = nil }
+        }
     }
 
     func windowWillClose(_ notification: Notification) {

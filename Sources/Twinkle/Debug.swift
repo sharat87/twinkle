@@ -13,6 +13,12 @@ import WebKit
 /// It only writes files on this Mac, and only when asked.
 @MainActor
 enum Debug {
+    /// US-layout key codes for letters, so a posted ⌘E is E to WebKit too,
+    /// which reads the key code (0 is A).
+    static let keyCodes: [String: UInt16] = Dictionary(uniqueKeysWithValues: zip(
+        "asdfhgzxcv_bqweryt".map(String.init), (0...17).map(UInt16.init)
+    ).filter { $0.0 != "_" } + [("o", 31), ("u", 32), ("i", 34), ("p", 35), ("l", 37), ("j", 38), ("k", 40),
+                                ("n", 45), ("m", 46)])
     static let notification = name("dump")
     static let openNotification = name("open")
     static let selectNotification = name("select")
@@ -118,10 +124,10 @@ enum Debug {
                         var flags: NSEvent.ModifierFlags = []
                         if name.hasPrefix("cmd-") { flags.insert(.command); name = name.dropFirst(4) }
                         if let (chars, code) = named[String(name)] { presses.append((chars, code, flags)) }
-                        else { presses.append((String(name), 0, flags)) }
+                        else { presses.append((String(name), Self.keyCodes[String(name)] ?? 0, flags)) }
                         rest = rest[rest.index(after: end)...]
                     } else {
-                        presses.append((String(c), 0, []))
+                        presses.append((String(c), Self.keyCodes[String(c)] ?? 0, []))
                         rest = rest.dropFirst()
                     }
                 }

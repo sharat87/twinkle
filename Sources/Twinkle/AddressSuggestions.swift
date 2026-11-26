@@ -1,5 +1,6 @@
 import AppKit
 import TwinkleCore
+import WebKit
 
 /// The address bar's dropdown: history and open tabs, fuzzy-matched as you
 /// type (see HistoryIndex), with the address completed inline when what you
@@ -8,10 +9,13 @@ import TwinkleCore
 /// It's a borderless child window under the field that never takes focus,
 /// so the field keeps the keyboard: ↑/↓ choose, ↩ opens, ⌘↩ opens in a new
 /// tab, ⇥ puts the chosen address in the field to edit, ⎋ closes.
+///
+/// History › Show Tab History lists the tab's back/forward list in it
+/// instead (see showHistory), until you type.
 @MainActor
 final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     struct Row {
-        enum Kind { case typed, page, tab(Tab) }
+        enum Kind { case typed, page, tab(Tab), history(WKBackForwardListItem) }
         var kind: Kind
         var title: String
         var detail: String
@@ -21,6 +25,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
 
     var open: (URL, _ newTab: Bool) -> Void = { _, _ in }
     var switchTo: (Tab) -> Void = { _ in }
+    var goTo: (WKBackForwardListItem) -> Void = { _ in }
     var tabs: () -> [Tab] = { [] }
     var current: () -> Tab? = { nil }
 
@@ -36,6 +41,8 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
     private var typed = ""
     /// The field's text for row 0 (typed plus any completion).
     private var fieldText = ""
+    /// Showing the tab's back/forward list rather than suggestions.
+    private var historyMode = false
 
     static let rowHeight: CGFloat = 38
     static let maxRows = 9
@@ -127,6 +134,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
     /// The field just got focus, its text all selected.
     func began() {
         typed = ""
+        historyMode = false
         hide()
     }
 
@@ -141,7 +149,28 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         update(complete: grew && atEnd)
     }
 
+    /// The pages ahead (furthest first), the one on screen, and the pages
+    /// behind (nearest first), with the one on screen highlighted, so ↓ is
+    /// back and ↑ forward.
+    func showHistory(_ list: WKBackForwardList) {
+        guard let current = list.currentItem else { return }
+        func row(_ item: WKBackForwardListItem, _ note: String = "") -> Row {
+            let address = Self.display(item.url.absoluteString)
+            return Row(kind: .history(item), title: (item.title ?? "").isEmpty ? address : item.title!,
+                       detail: note + address, url: item.url)
+        }
+        rows = list.forwardList.reversed().map { row($0) } + [row(current, "This page · ")] + list.backList.reversed().map { row($0) }
+        highlighted = list.forwardList.count
+        historyMode = true
+        fieldText = field.stringValue
+        typed = fieldText
+        table.reloadData()
+        show()
+        table.scrollRowToVisible(highlighted)
+    }
+
     private func update(complete: Bool) {
+        historyMode = false
         let query = typed.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return hide() }
         let now = Date()
@@ -280,10 +309,10 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
             (table.view(atColumn: 0, row: r, makeIfNecessary: false) as? SuggestionCell)?.updateHighlight(on)
         }
         guard updateField else { return }
-        let text = row == 0 ? fieldText : (rows[row].url.map { Self.display($0.absoluteString) } ?? fieldText)
+        let text = row == 0 && !historyMode ? fieldText : (rows[row].url.map { Self.display($0.absoluteString) } ?? fieldText)
         field.stringValue = text
         let end = (text as NSString).length
-        if row == 0, fieldText != typed {
+        if row == 0, !historyMode, fieldText != typed {
             let start = (typed as NSString).length
             field.currentEditor()?.selectedRange = NSRange(location: start, length: end - start)
         } else {
@@ -298,6 +327,8 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         switch row.kind {
         case .tab(let tab) where !newTab:
             switchTo(tab)
+        case .history(let item) where !newTab:
+            goTo(item)
         case .typed where row.url == nil:
             if let url = Address.resolve(fieldText, searchTemplate: AppState.shared.settings.searchURL) { open(url, newTab) }
         default:
