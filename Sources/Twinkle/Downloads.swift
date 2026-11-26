@@ -49,6 +49,7 @@ final class Downloads: NSObject, WKDownloadDelegate {
     func downloadDidFinish(_ download: WKDownload) {
         let id = ObjectIdentifier(download)
         if let file = destinations[id] {
+            Self.recordWhereFrom(file, source: download.originalRequest?.url, page: download.webView?.url)
             Status.show("Downloaded \(file.lastPathComponent)", file: file)
             NSApp.requestUserAttention(.informationalRequest)
             // Bounces the Downloads stack in the Dock, as Safari does.
@@ -65,6 +66,23 @@ final class Downloads: NSObject, WKDownloadDelegate {
         Status.show("\(name) failed: \(error.localizedDescription)", sticky: true)
         try? FileManager.default.removeItem(at: file)
         forget(id)
+    }
+
+    /// A file the page already has, like the PDF on screen.
+    func save(_ data: Data, suggestedFilename: String, source: URL?, page: URL?) {
+        let directory = AppState.shared.downloadsDirectory
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = Self.unique(directory.appendingPathComponent(Self.clean(suggestedFilename)))
+        do {
+            try data.write(to: file, options: .withoutOverwriting)
+        } catch {
+            Status.show("Couldn't save \(file.lastPathComponent): \(error.localizedDescription)", sticky: true)
+            return
+        }
+        Self.recordWhereFrom(file, source: source, page: page)
+        Status.show("Downloaded \(file.lastPathComponent)", file: file)
+        DistributedNotificationCenter.default().post(
+            name: .init("com.apple.DownloadFileFinished"), object: file.path)
     }
 
     private func forget(_ id: ObjectIdentifier) {
@@ -97,6 +115,21 @@ final class Downloads: NSObject, WKDownloadDelegate {
             try? FileManager.default.removeItem(at: file)
         }
         forget(id)
+    }
+
+    /// Finder's Get Info › Where from, as Safari sets it: the file's address,
+    /// then the page it was downloaded from. data: addresses are left out
+    /// (they're the file itself).
+    static func recordWhereFrom(_ file: URL, source: URL?, page: URL?) {
+        let froms = [source, page].compactMap { $0 }
+            .filter { $0.scheme?.lowercased() != "data" }
+            .map(\.absoluteString)
+        guard !froms.isEmpty,
+              let plist = try? PropertyListSerialization.data(fromPropertyList: froms, format: .binary, options: 0)
+        else { return }
+        _ = plist.withUnsafeBytes { bytes in
+            setxattr(file.path, "com.apple.metadata:kMDItemWhereFroms", bytes.baseAddress, bytes.count, 0, 0)
+        }
     }
 
     static func clean(_ name: String) -> String {

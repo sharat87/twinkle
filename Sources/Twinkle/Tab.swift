@@ -546,6 +546,14 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         host?.tab(self, popupWith: configuration)
     }
 
+    /// The download button of WebKit's PDF viewer. It calls this private
+    /// WKUIDelegate method (Safari implements it) and does nothing without it.
+    @objc(_webView:saveDataToFile:suggestedFilename:mimeType:originatingURL:)
+    func webView(_ webView: WKWebView, saveDataToFile data: Data, suggestedFilename: String,
+                 mimeType: String?, originatingURL: URL?) {
+        Downloads.shared.save(data, suggestedFilename: suggestedFilename, source: originatingURL, page: webView.url)
+    }
+
     func webViewDidClose(_ webView: WKWebView) {
         host?.tabWantsClose(self)
     }
