@@ -22,6 +22,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSSearchFieldDelegate,
     NSToolbarDelegate, NSMenuDelegate, NSMenuItemValidation {
 
+    static let tabRowHeight: CGFloat = 42
+
     private(set) var tabs: [Tab] = []
     private var selected = -1
     private var closedTabs: [(tab: SavedTab, temporary: Bool)] = []
@@ -144,7 +146,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         table.headerView = nil
         table.style = .sourceList
         table.backgroundColor = .clear
-        table.rowHeight = 42
+        table.rowHeight = Self.tabRowHeight
         table.intercellSpacing = .zero
         table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         table.dataSource = self
@@ -1105,11 +1107,16 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         switcherPanelTimer?.invalidate()
         switcherPanelTimer = nil
         guard let state = switcher, let window else { return }
-        // Beside the tab list, or at the window's edge when it's hidden.
-        let anchor = tabListItem.isCollapsed ? pageArea : tabListItem.viewController.view
-        let frame = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-        let right = tabListItem.isCollapsed ? frame.maxX - 12 : frame.minX - 8
-        switcherPanel.show(state.order, position: state.position, right: right, midY: frame.midY, parent: window)
+        // Beside the tab list, lined up with it; where it would be when it's hidden.
+        guard let list = table.enclosingScrollView else { return }
+        var frame = window.convertToScreen(list.convert(list.bounds, to: nil))
+        var gap: CGFloat = 8
+        if tabListItem.isCollapsed {
+            let page = window.convertToScreen(pageArea.convert(pageArea.bounds, to: nil))
+            frame = NSRect(x: page.maxX, y: page.minY, width: frame.width > 0 ? frame.width : 240, height: page.height - 4)
+            gap = 12
+        }
+        switcherPanel.show(state.order, position: state.position, beside: frame, gap: gap, parent: window)
     }
 
     private func finishSwitcher(commit: Bool) {
@@ -1125,12 +1132,15 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     func debugSwitcherView() -> NSView? { switcherPanel.isVisible ? switcherPanel.contentView : nil }
 
-    /// The switcher's frame and the tab list's, in the window, while it's up.
+    /// The switcher's frame and first row, and the tab list's, in the
+    /// window, while it's up.
     func debugSwitcherFrame() -> [String: String] {
-        guard let panel = switcherPanel.contentView?.window, panel.parent != nil, let window else { return [:] }
-        let list = tabListItem.viewController.view
+        guard let panel = switcherPanel.contentView?.window, panel.parent != nil, let window,
+              let row = switcherPanel.firstRowOnScreen, let list = table.enclosingScrollView else { return [:] }
         return ["panel": NSStringFromRect(window.convertFromScreen(panel.frame)),
-                "tabList": NSStringFromRect(list.convert(list.bounds, to: nil))]
+                "panelFirstRow": NSStringFromRect(window.convertFromScreen(row)),
+                "tabList": NSStringFromRect(list.convert(list.bounds, to: nil)),
+                "tabListFirstRow": NSStringFromRect(table.convert(table.rect(ofRow: 0), to: nil))]
     }
 
     @objc func moveTabUp(_ sender: Any?) {

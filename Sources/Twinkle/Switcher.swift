@@ -1,24 +1,23 @@
 import AppKit
 
-/// The list ⌃Tab steps through, most recently used first, floating beside
-/// the tab list while ⌃ is held. It never takes the keyboard or the mouse.
+/// The list ⌃Tab steps through, most recently used first, while ⌃ is held:
+/// a copy of the tab list (the same rows) floating beside it. It never
+/// takes the keyboard or the mouse.
 @MainActor
-final class TabSwitcherPanel {
-    private static let rowHeight: CGFloat = 30
-    private static let width: CGFloat = 320
-    private static let inset: CGFloat = 6
-    private static let maxRows = 15
-
+final class TabSwitcherPanel: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private let panel: NSPanel
-    private let list = NSView()
+    private let table = NSTableView()
+    private let scroll = NSScrollView()
+    private var order: [Tab] = []
 
     var isVisible: Bool { panel.parent != nil }
     /// For debug.sh.
     var contentView: NSView? { panel.contentView }
 
-    init() {
+    override init() {
         panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: true)
+        super.init()
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -27,37 +26,47 @@ final class TabSwitcherPanel {
         panel.animationBehavior = .none
 
         let background = NSVisualEffectView()
-        background.material = .popover
+        background.material = .sidebar
         background.blendingMode = .behindWindow
         background.state = .active
         background.maskImage = Self.roundedMask(radius: 10)
-        list.autoresizingMask = [.width, .height]
-        background.addSubview(list)
+
+        // Set up as the tab list is (BrowserWindowController.makeSidebar).
+        let column = NSTableColumn(identifier: .init("tab"))
+        column.resizingMask = .autoresizingMask
+        table.addTableColumn(column)
+        table.headerView = nil
+        table.style = .sourceList
+        table.backgroundColor = .clear
+        table.rowHeight = BrowserWindowController.tabRowHeight
+        table.intercellSpacing = .zero
+        table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
+        table.dataSource = self
+        table.delegate = self
+        scroll.documentView = table
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = false
+        scroll.automaticallyAdjustsContentInsets = false
+        scroll.contentInsets = NSEdgeInsetsZero
+        scroll.autoresizingMask = [.width, .height]
+        background.addSubview(scroll)
         panel.contentView = background
     }
 
-    /// Shows `order` with `position` marked, its right edge at `right` and
-    /// centred on `midY` (screen coordinates), over `parent`.
-    func show(_ order: [Tab], position: Int, right: CGFloat, midY: CGFloat, parent: NSWindow) {
-        let count = min(order.count, Self.maxRows)
-        // With more tabs than fit, the window of rows follows the mark.
-        let first = max(0, min(position - count / 2, order.count - count))
-
-        let height = CGFloat(count) * Self.rowHeight + 2 * Self.inset
-        var frame = NSRect(x: right - Self.width, y: midY - height / 2, width: Self.width, height: height)
-        let bounds = parent.frame
-        frame.origin.x = max(bounds.minX + 8, frame.origin.x)
-        frame.origin.y = max(bounds.minY + 8, min(frame.origin.y, bounds.maxY - height - 8))
+    /// Shows `order` with `position` marked. `list` is the tab list's
+    /// scroll view in screen coordinates: the copy takes its width and top
+    /// edge, ends `gap` to its left, and grows down no further than it.
+    func show(_ order: [Tab], position: Int, beside list: NSRect, gap: CGFloat, parent: NSWindow) {
+        self.order = order
+        let bottomPadding: CGFloat = 6
+        let height = min(CGFloat(order.count) * table.rowHeight + bottomPadding, list.height)
+        let frame = NSRect(x: list.minX - gap - list.width, y: list.maxY - height, width: list.width, height: height)
         panel.setFrame(frame, display: false)
+        scroll.frame = NSRect(x: 0, y: bottomPadding, width: frame.width, height: height - bottomPadding)
 
-        list.frame = NSRect(origin: .zero, size: frame.size)
-        list.subviews.forEach { $0.removeFromSuperview() }
-        for (row, i) in (first..<first + count).enumerated() {
-            let y = height - Self.inset - CGFloat(row + 1) * Self.rowHeight
-            let view = SwitcherRow(frame: NSRect(x: Self.inset, y: y, width: Self.width - 2 * Self.inset, height: Self.rowHeight))
-            view.show(order[i], marked: i == position)
-            list.addSubview(view)
-        }
+        table.reloadData()
+        table.selectRowIndexes(IndexSet(integer: position), byExtendingSelection: false)
+        table.scrollRowToVisible(position)
 
         if panel.parent == nil { parent.addChildWindow(panel, ordered: .above) }
         panel.display()
@@ -66,6 +75,33 @@ final class TabSwitcherPanel {
     func hide() {
         panel.parent?.removeChildWindow(panel)
         panel.orderOut(nil)
+        order = []
+    }
+
+    /// Row 0's frame on screen, for debug.sh to check it lines up.
+    var firstRowOnScreen: NSRect? {
+        guard isVisible, !order.isEmpty else { return nil }
+        return panel.convertToScreen(table.convert(table.rect(ofRow: 0), to: nil))
+    }
+
+    // MARK: Table
+
+    func numberOfRows(in tableView: NSTableView) -> Int { order.count }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let rowView = TabRowView()
+        let id = order[row].containerID
+        let color = AppState.shared.container(id).map { NSColor(hex: $0.color) }
+        rowView.containerColor = color
+        rowView.continuesAbove = color != nil && row > 0 && order[row - 1].containerID == id
+        rowView.continuesBelow = color != nil && row + 1 < order.count && order[row + 1].containerID == id
+        return rowView
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let cell = tableView.makeView(withIdentifier: TabCell.identifier, owner: nil) as? TabCell ?? TabCell()
+        cell.show(order[row])
+        return cell
     }
 
     private static func roundedMask(radius r: CGFloat) -> NSImage {
@@ -77,53 +113,5 @@ final class TabSwitcherPanel {
         image.capInsets = NSEdgeInsets(top: r, left: r, bottom: r, right: r)
         image.resizingMode = .stretch
         return image
-    }
-}
-
-/// A tab in the switcher: its container's colour, favicon and title, drawn
-/// like a tab list row.
-private final class SwitcherRow: NSView {
-    private let favicon = NSImageView()
-    private let title = NSTextField(labelWithString: "")
-    private var marked = false
-    private var containerColor: NSColor?
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        favicon.imageScaling = .scaleProportionallyUpOrDown
-        favicon.frame = NSRect(x: 22, y: (frame.height - 18) / 2, width: 18, height: 18)
-        title.font = UI.font
-        title.lineBreakMode = .byTruncatingTail
-        title.sizeToFit()
-        let h = title.frame.height
-        title.frame = NSRect(x: 48, y: (frame.height - h) / 2, width: frame.width - 56, height: h)
-        addSubview(favicon)
-        addSubview(title)
-    }
-
-    required init?(coder: NSCoder) { fatalError("not used") }
-
-    func show(_ tab: Tab, marked: Bool) {
-        self.marked = marked
-        containerColor = AppState.shared.container(tab.containerID).map { NSColor(hex: $0.color) }
-        title.stringValue = tab.title
-        title.textColor = marked ? .alternateSelectedControlTextColor
-            : tab.isUnloaded ? .secondaryLabelColor : .labelColor
-        favicon.image = tab.icon ?? TabCell.placeholder
-        favicon.alphaValue = tab.isUnloaded && !marked ? 0.5 : 1
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        if marked {
-            NSColor.selectedContentBackgroundColor.setFill()
-            // Clear of the container bar, as in the tab list.
-            NSBezierPath(roundedRect: NSRect(x: 14, y: 1, width: bounds.width - 14, height: bounds.height - 2),
-                         xRadius: 6, yRadius: 6).fill()
-        }
-        if let containerColor {
-            containerColor.setFill()
-            NSBezierPath(roundedRect: NSRect(x: 3, y: 5, width: 4, height: bounds.height - 10), xRadius: 2, yRadius: 2).fill()
-        }
     }
 }
