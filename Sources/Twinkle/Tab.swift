@@ -351,10 +351,14 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
             return
         }
 
-        // mailto:, zoommtg:, etc. go to the app that handles them.
+        // mailto:, zoommtg:, etc. go to the app that handles them. Sites
+        // often launch their app from a hidden iframe (Slack after sign-in
+        // does), so that counts when the page itself made the iframe go
+        // there; an ad's frame sending itself to an app doesn't.
         let scheme = url.scheme?.lowercased() ?? ""
         if !Self.webSchemes.contains(scheme) {
-            if action.navigationType == .linkActivated || action.targetFrame?.isMainFrame != false {
+            if action.navigationType == .linkActivated || action.targetFrame?.isMainFrame != false
+                || action.sourceFrame.isMainFrame {
                 NSWorkspace.shared.open(url)
             }
             decisionHandler(.cancel)
