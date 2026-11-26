@@ -77,14 +77,61 @@ public struct SettingsFile: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         settings = try Settings(from: decoder)
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        containers = try c.decodeIfPresent([Container].self, forKey: .containers)
+        if !c.contains(.containers) {
+            containers = nil
+        } else if try c.decodeNil(forKey: .containers) {
+            containers = nil
+        } else if let legacy = try? c.decode([Container].self, forKey: .containers) {
+            containers = legacy
+        } else {
+            let values = try c.decode([String: ContainerSettingsValue].self, forKey: .containers)
+            containers = values.sorted { $0.key < $1.key }.map { entry in
+                let value = entry.value
+                return Container(id: value.id, name: entry.key, color: value.color,
+                                 appleScriptEnabled: value.appleScriptEnabled)
+            }
+        }
         domains = try c.decodeIfPresent(Domains.self, forKey: .domains) ?? Domains()
     }
 
     public func encode(to encoder: Encoder) throws {
         try settings.encode(to: encoder)
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encodeIfPresent(containers, forKey: .containers)
+        if let containers {
+            var values: [String: ContainerSettingsValue] = [:]
+            for container in containers {
+                guard values[container.name] == nil else {
+                    throw EncodingError.invalidValue(
+                        containers,
+                        .init(codingPath: encoder.codingPath + [CodingKeys.containers],
+                              debugDescription: "Container names must be unique.")
+                    )
+                }
+                values[container.name] = ContainerSettingsValue(container: container)
+            }
+            try c.encode(values, forKey: .containers)
+        }
         try c.encode(domains, forKey: .domains)
+    }
+}
+
+private struct ContainerSettingsValue: Codable {
+    var id: UUID
+    var color: String
+    var appleScriptEnabled: Bool
+
+    init(container: Container) {
+        id = container.id
+        color = container.color
+        appleScriptEnabled = container.appleScriptEnabled
+    }
+
+    enum CodingKeys: String, CodingKey { case id, color, appleScriptEnabled }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        color = try c.decodeIfPresent(String.self, forKey: .color) ?? ContainerList.palette[0]
+        appleScriptEnabled = try c.decodeIfPresent(Bool.self, forKey: .appleScriptEnabled) ?? false
     }
 }

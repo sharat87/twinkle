@@ -88,6 +88,21 @@ let ddg = "https://duckduckgo.com/?q=%s"
         #expect(again == file)
         let keys = try JSONSerialization.jsonObject(with: JSONEncoder().encode(file)) as! [String: Any]
         #expect(keys["containers"] != nil && keys["searchURL"] != nil)
+        #expect((keys["containers"] as? [String: [String: Any]])?["Work"]?["name"] == nil)
+    }
+
+    @Test func nameKeyedContainersDecodeAndEncode() throws {
+        let json = ##"{"containers":{"Work":{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","color":"#F97316","appleScriptEnabled":true},"Personal":{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FE"}}}"##
+        let file = try JSONDecoder().decode(SettingsFile.self, from: Data(json.utf8))
+        #expect(file.containers?.map(\.name) == ["Personal", "Work"])
+        #expect(file.containers?.first?.color == ContainerList.palette[0])
+        #expect(file.containers?.last?.appleScriptEnabled == true)
+
+        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(file)) as! [String: Any]
+        let containers = encoded["containers"] as! [String: [String: Any]]
+        #expect(containers["Work"]?["name"] == nil)
+        #expect(containers["Work"]?["appleScriptEnabled"] as? Bool == true)
+        #expect(containers["Personal"] != nil)
     }
 }
 

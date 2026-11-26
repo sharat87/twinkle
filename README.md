@@ -119,14 +119,14 @@ History is searched in memory (read from `history.sqlite` once), so typing never
 
 ### Containers
 
-They're the `containers` list in settings.json: `id` (keys the cookie jar; keep it), `name`, `color`, and optional `appleScriptEnabled` (defaults to `false`). Without the key there are no containers, and none of their data is deleted.
+They're the `containers` object in settings.json: each container name is a key, and its value has `id` (keys the cookie jar; keep it), `color`, and optional `appleScriptEnabled` (defaults to `false`). Containers are shown alphabetically by name. Existing array-form files are still accepted. Without the key there are no containers, and none of their data is deleted.
 
 ```json
 {
-  "containers": [
-    { "id": "E00727EE-…", "name": "Personal", "color": "#3B82F6" },
-    { "id": "8BB4415B-…", "name": "Work", "color": "#F97316" }
-  ],
+  "containers": {
+    "Personal": { "id": "E00727EE-…", "color": "#3B82F6" },
+    "Work": { "id": "8BB4415B-…", "color": "#F97316" }
+  },
   "domains": {
     "example.com": { "container": "Personal" },
     "mail.example.com": { "container": "Work" },
