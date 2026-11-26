@@ -40,17 +40,28 @@ enum Scripting {
 
     /// What `do JavaScript` returns: text, numbers and booleans as they are,
     /// anything else as JSON text.
-    nonisolated static func result(_ value: Any?) -> Any? {
+    /// A result of type "any" has to be a descriptor: Foundation can't
+    /// convert a plain string or number to it, and the failure takes the
+    /// app down.
+    nonisolated static func result(_ value: Any?) -> NSAppleEventDescriptor? {
         switch value {
         case nil, is NSNull: return nil
-        case let text as String: return text
-        case let number as NSNumber: return number
+        case let text as String: return NSAppleEventDescriptor(string: text)
+        case let number as NSNumber:
+            if CFGetTypeID(number) == CFBooleanGetTypeID() {
+                return NSAppleEventDescriptor(boolean: number.boolValue)
+            }
+            let double = number.doubleValue
+            if double == double.rounded(), abs(double) <= Double(Int32.max) {
+                return NSAppleEventDescriptor(int32: Int32(double))
+            }
+            return NSAppleEventDescriptor(double: double)
         case let other?:
             if JSONSerialization.isValidJSONObject(other),
                let data = try? JSONSerialization.data(withJSONObject: other, options: [.sortedKeys, .withoutEscapingSlashes]) {
-                return String(decoding: data, as: UTF8.self)
+                return NSAppleEventDescriptor(string: String(decoding: data, as: UTF8.self))
             }
-            return String(describing: other)
+            return NSAppleEventDescriptor(string: String(describing: other))
         }
     }
 }
