@@ -1,10 +1,10 @@
 import AppKit
 import WebKit
 
-/// Follow Link (⌘I): type the text of a link, button or field on screen to
-/// click or focus it. Ones with no text of their own get a two-letter label
-/// instead, picked so it isn't in any text on screen: typing it can only
-/// mean that one.
+/// Follow Link (⌘I): type the text of a link, button or field on screen,
+/// then Return to click or focus it, or ⌘Return to open a link in a new tab.
+/// Ones with no text of their own get a two-letter label instead, picked so
+/// it isn't in any of the text: typing it can only mean that one.
 ///
 /// The page is read by a script in Twinkle's own script world, out of the
 /// page's sight; the labels are native views over the web view.
@@ -19,7 +19,7 @@ enum Hints {
         let label: String
     }
 
-    static func show(in webView: WKWebView, newTab: Bool, open: @escaping (URL) -> Void) {
+    static func show(in webView: WKWebView, open: @escaping (URL) -> Void) {
         webView.evaluateJavaScript(collectScript, in: nil, in: .defaultClient) { result in
             guard let rows = (try? result.get()) as? [[Any]], !rows.isEmpty else { return NSSound.beep() }
             let zoom = webView.pageZoom
@@ -34,7 +34,7 @@ enum Hints {
             let all = targets.map { i, rect, text in
                 Target(index: i, rect: rect, text: text, label: text.isEmpty ? labels.next() ?? "" : "")
             }
-            let overlay = HintsOverlay(targets: all) { [weak webView] target in
+            let overlay = HintsOverlay(targets: all) { [weak webView] target, newTab in
                 guard let webView else { return }
                 webView.window?.makeFirstResponder(webView)
                 let script = "window.__twinkleHint?.(\(target.index), \(newTab))"
@@ -143,12 +143,12 @@ enum Hints {
 @MainActor
 final class HintsOverlay: NSView {
     private let targets: [Hints.Target]
-    private var choose: ((Hints.Target) -> Void)?
+    private var choose: ((Hints.Target, _ newTab: Bool) -> Void)?
     private var query = ""
     private let pill = NSTextField(labelWithString: "")
     private let pillBox = NSView()
 
-    init(targets: [Hints.Target], choose: @escaping (Hints.Target) -> Void) {
+    init(targets: [Hints.Target], choose: @escaping (Hints.Target, _ newTab: Bool) -> Void) {
         self.targets = targets
         self.choose = choose
         super.init(frame: .zero)
@@ -184,11 +184,12 @@ final class HintsOverlay: NSView {
         return targets.filter { $0.label.isEmpty ? $0.text.contains(query) : $0.label.hasPrefix(query) }
     }
 
-    /// Return's pick among several: the text that is exactly what you typed,
-    /// else the shortest (the most specific), else the first.
+    /// Return's pick: the only match, else the text that is exactly what you
+    /// typed, else the shortest (the most specific), else the first.
     private var best: Hints.Target? {
-        guard !query.isEmpty else { return nil }
         let m = matches
+        if m.count == 1 { return m[0] }
+        guard !query.isEmpty else { return nil }
         return m.first { $0.text == query } ?? m.filter { !$0.text.isEmpty }.min { $0.text.count < $1.text.count } ?? m.first
     }
 
@@ -197,7 +198,8 @@ final class HintsOverlay: NSView {
         if query.isEmpty {
             pill.stringValue = "Type a link's or field's text, or its label"
         } else {
-            pill.stringValue = count == 0 ? "\(query) — nothing matches" : "\(query) — \(count) match\(count == 1 ? "" : "es"), Return for the highlighted one"
+            pill.stringValue = count == 0 ? "\(query) — nothing matches"
+                : "\(query) — \(count == 1 ? "1 match" : "\(count) matches"): Return to click the highlighted one, ⌘Return for a new tab"
         }
         needsDisplay = true
     }
@@ -232,12 +234,12 @@ final class HintsOverlay: NSView {
         text.draw(at: NSPoint(x: box.minX + 3, y: box.minY + 1))
     }
 
-    private func finish(_ target: Hints.Target?) {
+    private func finish(_ target: Hints.Target?, newTab: Bool = false) {
         guard let choose else { return }
         self.choose = nil
         let window = self.window
         removeFromSuperview()
-        if let target { choose(target) } else if let webView = superviewWebView { window?.makeFirstResponder(webView) }
+        if let target { choose(target, newTab) } else if let webView = superviewWebView { window?.makeFirstResponder(webView) }
     }
 
     private weak var superviewWebView: NSView?
@@ -248,7 +250,9 @@ final class HintsOverlay: NSView {
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
         case 53: return finish(nil)                       // Escape
-        case 36, 76: return finish(best ?? (matches.count == 1 ? matches.first : nil))  // Return, Enter
+        case 36, 76:                                      // Return, Enter
+            if let best { finish(best, newTab: event.modifierFlags.contains(.command)) } else { NSSound.beep() }
+            return
         case 51:                                          // Delete
             if !query.isEmpty { query.removeLast() }
             return update()
@@ -260,39 +264,17 @@ final class HintsOverlay: NSView {
         else { return super.keyDown(with: event) }
         if query.isEmpty && chars == " " { return }
         query += chars
-        let m = matches
-        if m.count == 1 {
-            Self.swallowRest(of: m[0], typed: query)
-            return finish(m[0])
-        }
         update()
     }
 
-    /// A target is picked as soon as it's the only match, often mid-word:
-    /// the rest of the word, typed straight after, is eaten rather than
-    /// landing in the page (or the field just focused).
-    private static func swallowRest(of target: Hints.Target, typed: String) {
-        let whole = target.text.isEmpty ? target.label : target.text
-        var typed = typed
-        var last = Date()
-        var monitor: Any?
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let chars = event.characters?.lowercased() ?? ""
-            if event.modifierFlags.intersection([.command, .control, .option]).isEmpty, !chars.isEmpty,
-               Date().timeIntervalSince(last) < 0.6, whole.contains(typed + chars) {
-                typed += chars
-                last = Date()
-                return nil
-            }
-            if let monitor { NSEvent.removeMonitor(monitor) }
-            monitor = nil
-            return event
+    /// ⌘Return comes as a key equivalent before it's a key press.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard window?.firstResponder === self, [36, 76].contains(event.keyCode),
+              event.modifierFlags.intersection([.command, .control, .option]) == .command else {
+            return super.performKeyEquivalent(with: event)
         }
-        // Gone after a pause even if no other key comes.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            if let monitor { NSEvent.removeMonitor(monitor) }
-            monitor = nil
-        }
+        keyDown(with: event)
+        return true
     }
 
     override func cancelOperation(_ sender: Any?) { finish(nil) }

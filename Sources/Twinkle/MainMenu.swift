@@ -82,7 +82,6 @@ enum MainMenu {
             item("Back", #selector(BrowserWindowController.goBack(_:)), "["),
             item("Forward", #selector(BrowserWindowController.goForward(_:)), "]"),
             item("Follow Link…", #selector(BrowserWindowController.followLink(_:)), "i"),
-            item("Follow Link in New Tab…", #selector(BrowserWindowController.followLinkInNewTab(_:)), "i", [.command, .shift]),
             .separator(),
             item("Bookmark This Page", #selector(BrowserWindowController.bookmarkPage(_:)), "d"),
             item("Edit Bookmarks…", #selector(AppDelegate.openBookmarks(_:)), target: app),

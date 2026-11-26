@@ -566,9 +566,9 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     /// Follow Link: type a link's or field's text to click or focus it.
-    func showHints(newTab: Bool) {
+    func showHints() {
         guard let webView, dialogs.isEmpty, !webView.subviews.contains(where: { $0 is HintsOverlay }) else { return }
-        Hints.show(in: webView, newTab: newTab) { [weak self] url in
+        Hints.show(in: webView) { [weak self] url in
             guard let self else { return }
             self.host?.tab(self, open: url, inBackground: true)
         }
