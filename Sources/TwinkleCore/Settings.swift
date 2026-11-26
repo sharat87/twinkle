@@ -77,29 +77,35 @@ public struct Settings: Codable, Equatable, Sendable {
     }
 }
 
-/// `settings.json` as a whole: the settings, and the containers under
-/// `"containers"`. `containers` is nil when the key is missing, which is told
-/// apart from an empty list so a deleted key never costs a container its data.
+/// `settings.json` as a whole: the settings, the containers under
+/// `"containers"` and settings per domain under `"domains"`. `containers` is
+/// nil when the key is missing, which is told apart from an empty list so a
+/// deleted key never costs a container its data.
 public struct SettingsFile: Codable, Equatable, Sendable {
     public var settings: Settings
     public var containers: [Container]?
+    public var domains: Domains
 
-    public init(settings: Settings = Settings(), containers: [Container]? = ContainerList.starter.containers) {
+    public init(settings: Settings = Settings(), containers: [Container]? = ContainerList.starter.containers,
+                domains: Domains = Domains()) {
         self.settings = settings
         self.containers = containers
+        self.domains = domains
     }
 
-    enum CodingKeys: String, CodingKey { case containers }
+    enum CodingKeys: String, CodingKey { case containers, domains }
 
     public init(from decoder: Decoder) throws {
         settings = try Settings(from: decoder)
         let c = try decoder.container(keyedBy: CodingKeys.self)
         containers = try c.decodeIfPresent([Container].self, forKey: .containers)
+        domains = try c.decodeIfPresent(Domains.self, forKey: .domains) ?? Domains()
     }
 
     public func encode(to encoder: Encoder) throws {
         try settings.encode(to: encoder)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encodeIfPresent(containers, forKey: .containers)
+        try c.encode(domains, forKey: .domains)
     }
 }

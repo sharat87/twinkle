@@ -26,7 +26,6 @@ final class AppState {
 
     static let settingsFile = "settings.json"
     static let sessionFile = "session.json"
-    static let zoomFile = "zoom.json"
 
     /// Set by `--profile <folder>`: a separate Twinkle, for testing, that
     /// keeps everything in that folder and nothing in the usual one. Its web
@@ -143,27 +142,33 @@ final class AppState {
             containers = list
             NotificationCenter.default.post(name: .containersChanged, object: nil)
         }
+        domains = loaded.domains
     }
 
     func updateSettings(_ change: (inout Settings) -> Void) {
         var changed = settings
         change(&changed)
-        guard save(settings: changed, containers: containersInFile ? containers : nil) else { return }
+        guard save(settings: changed) else { return }
         NotificationCenter.default.post(name: .settingsChanged, object: nil)
     }
 
-    /// Writes settings.json, unless it has an error: a typo in a hand-edited
-    /// file is reported, never overwritten.
-    /// nil `containers` leaves the key out, as it was.
-    private func save(settings: Settings, containers: [Container]?) -> Bool {
+    /// Writes settings.json with what's changed, unless it has an error: a
+    /// typo in a hand-edited file is reported, never overwritten. Without
+    /// `containers` a missing "containers" key stays missing.
+    private func save(settings: Settings? = nil, containers: [Container]?? = nil, domains: Domains? = nil) -> Bool {
         guard !settingsBroken else {
             Status.show("Fix settings.json first; Twinkle won't overwrite it while it has an error.", sticky: true)
             return false
         }
-        self.settings = settings
-        self.containers = containers ?? []
-        containersInFile = containers != nil
-        try? files.save(SettingsFile(settings: settings, containers: containers), to: Self.settingsFile)
+        if let settings { self.settings = settings }
+        if let containers {
+            self.containers = containers ?? []
+            containersInFile = containers != nil
+        }
+        if let domains { self.domains = domains }
+        let file = SettingsFile(settings: self.settings, containers: containersInFile ? self.containers : nil,
+                                domains: self.domains)
+        try? files.save(file, to: Self.settingsFile)
         settingsDate = files.modificationDate(Self.settingsFile)
         return true
     }
@@ -210,7 +215,7 @@ final class AppState {
     @discardableResult
     private func saveContainers(_ list: [Container]) -> Bool {
         // An empty list doesn't add a "containers" key that was missing.
-        guard save(settings: settings, containers: containersInFile || !list.isEmpty ? list : nil) else { return false }
+        guard save(containers: .some(containersInFile || !list.isEmpty ? list : nil)) else { return false }
         NotificationCenter.default.post(name: .containersChanged, object: nil)
         return true
     }
@@ -378,34 +383,19 @@ final class AppState {
         historyIndex.removeAll()
     }
 
-    // MARK: Zoom
+    // MARK: Domains
 
-    private var zoomLevelsCache: ZoomLevels?
-    private var zoomDate: Date?
-
-    /// zoom.json, re-read if it was edited by hand.
-    private var zoomLevels: ZoomLevels {
-        get {
-            let date = files.modificationDate(Self.zoomFile)
-            if zoomLevelsCache == nil || date != zoomDate {
-                zoomDate = date
-                zoomLevelsCache = (try? files.load(ZoomLevels.self, from: Self.zoomFile)) ?? zoomLevelsCache ?? ZoomLevels()
-            }
-            return zoomLevelsCache!
-        }
-        set {
-            zoomLevelsCache = newValue
-            try? files.save(newValue, to: Self.zoomFile)
-            zoomDate = files.modificationDate(Self.zoomFile)
-        }
-    }
+    /// Settings per domain, from settings.json's `domains`.
+    private(set) var domains = Domains()
 
     func zoom(forHost host: String?) -> Double {
-        zoomLevels.level(forHost: host)
+        domains.zoom(forHost: host)
     }
 
     func setZoom(_ level: Double, forHost host: String) {
-        zoomLevels.set(level, forHost: host)
+        var changed = domains
+        changed.setZoom(level, forHost: host)
+        _ = save(domains: changed)
     }
 
     var downloadsDirectory: URL {

@@ -248,25 +248,32 @@ let ddg = "https://duckduckgo.com/?q=%s"
 
 @Suite struct ZoomTests {
     @Test func steps() {
-        #expect(ZoomLevels.step(from: 1, in: true) == 1.1)
-        #expect(ZoomLevels.step(from: 1, in: false) == 0.9)
-        #expect(ZoomLevels.step(from: 1.2, in: true) == 1.25)
-        #expect(ZoomLevels.step(from: 3, in: true) == 3)
-        #expect(ZoomLevels.step(from: 0.5, in: false) == 0.5)
+        #expect(Zoom.step(from: 1, in: true) == 1.1)
+        #expect(Zoom.step(from: 1, in: false) == 0.9)
+        #expect(Zoom.step(from: 1.2, in: true) == 1.25)
+        #expect(Zoom.step(from: 3, in: true) == 3)
+        #expect(Zoom.step(from: 0.5, in: false) == 0.5)
     }
 
-    @Test func perSite() throws {
-        var z = ZoomLevels()
-        #expect(z.set(1.25, forHost: "www.example.com") == "example.com")
-        #expect(z.level(forHost: "example.com") == 1.25)
-        #expect(z.level(forHost: "docs.example.com") == 1.25)
-        #expect(z.level(forHost: "other.com") == 1)
-        z.set(1.5, forHost: "docs.example.com")
-        #expect(z.sites == ["example.com": 1.5])
-        z.set(1, forHost: "example.com")
-        #expect(z.sites.isEmpty)
-        let file = try JSONDecoder().decode(ZoomLevels.self, from: Data(#"{"a.com": 0.8}"#.utf8))
-        #expect(file.level(forHost: "a.com") == 0.8)
+    @Test func perDomain() throws {
+        var d = Domains()
+        #expect(d.setZoom(1.25, forHost: "www.example.com") == "example.com")
+        #expect(d.zoom(forHost: "example.com") == 1.25)
+        #expect(d.zoom(forHost: "docs.example.com") == 1.25)
+        #expect(d.zoom(forHost: "other.com") == 1)
+        d.setZoom(1.5, forHost: "docs.example.com")
+        #expect(d.entries == ["example.com": DomainSettings(zoom: 1.5)])
+        d.setZoom(1, forHost: "example.com")
+        #expect(d.entries.isEmpty)
+
+        // An entry without a zoom doesn't hide a broader one's.
+        d.entries = ["example.com": DomainSettings(zoom: 0.8), "docs.example.com": DomainSettings()]
+        #expect(d.zoom(forHost: "docs.example.com") == 0.8)
+
+        let file = try JSONDecoder().decode(SettingsFile.self, from: Data(#"{"domains": {"a.com": {"zoom": 0.8}}}"#.utf8))
+        #expect(file.domains.zoom(forHost: "a.com") == 0.8)
+        let none = try JSONDecoder().decode(SettingsFile.self, from: Data("{}".utf8))
+        #expect(none.domains.entries.isEmpty)
     }
 }
 

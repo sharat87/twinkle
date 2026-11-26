@@ -61,11 +61,10 @@ Everything lives in Twinkle's sandbox container, in `~/Library/Containers/dev.tw
 
 | File | What |
 |---|---|
-| `settings.json` | Search engine, window title format, downloads folder, filter lists, sites with blocking off, and your containers. Missing keys take defaults. |
+| `settings.json` | Search engine, window title format, downloads folder, filter lists, sites with blocking off, your containers, and settings per domain (zoom). Missing keys take defaults. |
 | `session.json` | Open tabs, restored at launch. |
 | `filters/custom.txt` | Your own filter rules. |
 | `filters/cache/` | Downloaded filter lists. |
-| `zoom.json` | Zoom level per site, like `{"example.com": 1.25}`. Covers subdomains. |
 | `bookmarks.json` | Bookmarks (from Safari), searched by the address bar. |
 | `history.sqlite` | Pages visited (address, title, visits, last visit), kept `historyDays`. Not written for temporary containers. History › Clear History empties it. |
 | `favicons/` | Site icons for the tab list, one small PNG per host. Not written for temporary containers. |
@@ -94,6 +93,8 @@ Downloads can only go to `~/Downloads` (or a folder in it): that's all the sandb
   "monospaceFontSize": 18
 }
 ```
+
+`domains` holds settings per domain, so far only the zoom level ⌘+ and ⌘- remember: `"domains": {"example.com": {"zoom": 1.25}}`. An entry covers its subdomains, the most specific one winning.
 
 `unloadTabsAfterMinutes: 0` keeps every tab loaded. `historyDays: 0` keeps no history. `monospaceFont` and `monospaceFontSize` (CSS pixels) are what pages asking for `monospace` get, and what plain text and JSON are shown in; they apply to tabs opened after the change. The window title ends in ` (host)` so KeePassXC auto-type can match on it.
 

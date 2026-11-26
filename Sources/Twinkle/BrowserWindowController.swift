@@ -1033,12 +1033,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     @objc func zoomIn(_ sender: Any?) {
         guard let webView = current?.webView else { return }
-        setZoom(ZoomLevels.step(from: webView.pageZoom, in: true))
+        setZoom(Zoom.step(from: webView.pageZoom, in: true))
     }
 
     @objc func zoomOut(_ sender: Any?) {
         guard let webView = current?.webView else { return }
-        setZoom(ZoomLevels.step(from: webView.pageZoom, in: false))
+        setZoom(Zoom.step(from: webView.pageZoom, in: false))
     }
 
     @objc func actualSize(_ sender: Any?) {
@@ -1047,7 +1047,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     /// Zooms the page and remembers the level for its site, so the site's
     /// other open tabs follow and it opens at this zoom next time.
-    /// Temporary containers zoom without leaving a trace in zoom.json.
+    /// Temporary containers zoom without leaving a trace in settings.json.
     private func setZoom(_ level: Double) {
         guard let tab = current, let webView = tab.webView else { return }
         webView.pageZoom = level
