@@ -61,8 +61,7 @@ Everything lives in Twinkle's sandbox container, in `~/Library/Containers/dev.tw
 
 | File | What |
 |---|---|
-| `settings.json` | Search engine, window title format, downloads folder, filter lists, sites with blocking off. Missing keys take defaults. |
-| `containers.json` | Containers: `id` (keys the cookie jar; keep it), `name`, `color`, `sites` (always open in this container). |
+| `settings.json` | Search engine, window title format, downloads folder, filter lists, sites with blocking off, and your containers. Missing keys take defaults. |
 | `session.json` | Open tabs, restored at launch. |
 | `filters/custom.txt` | Your own filter rules. |
 | `filters/cache/` | Downloaded filter lists. |
@@ -71,7 +70,7 @@ Everything lives in Twinkle's sandbox container, in `~/Library/Containers/dev.tw
 | `history.sqlite` | Pages visited (address, title, visits, last visit), kept `historyDays`. Not written for temporary containers. History › Clear History empties it. |
 | `favicons/` | Site icons for the tab list, one small PNG per host. Not written for temporary containers. |
 
-The Twinkle menu opens each of these. WebKit keeps each container's site data in the container's `Library/WebKit/`. When a container is gone from `containers.json`, its cookies and site data are deleted at the next launch.
+The Twinkle menu opens each of these. WebKit keeps each container's site data in the container's `Library/WebKit/`. When a container is gone from `settings.json`, its cookies and site data are deleted at the next launch.
 
 Downloads can only go to `~/Downloads` (or a folder in it): that's all the sandbox lets Twinkle write.
 
@@ -118,7 +117,9 @@ When what you type is the start of an address you've visited, it's completed inl
 
 History is searched in memory (read from `history.sqlite` once), so typing never waits on the disk: about 2 ms a keystroke with the list redrawn, and under 10 ms to search 50,000 pages.
 
-### containers.json
+### Containers
+
+They're the `containers` list in settings.json: `id` (keys the cookie jar; keep it), `name`, `color`, and `sites` that always open in it. Without the key there are no containers, and none of their data is deleted.
 
 ```json
 {

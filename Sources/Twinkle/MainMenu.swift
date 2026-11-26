@@ -16,7 +16,6 @@ enum MainMenu {
             item("Star the Repo on GitHub", #selector(AppDelegate.starRepo(_:)), target: app),
             .separator(),
             item("Settings…", #selector(AppDelegate.openSettings(_:)), ",", target: app),
-            item("Edit Containers…", #selector(AppDelegate.openContainers(_:)), target: app),
             item("Edit Custom Filters…", #selector(AppDelegate.openCustomFilters(_:)), target: app),
             item("Show Twinkle Folder", #selector(AppDelegate.openDataFolder(_:)), target: app),
             .separator(),
@@ -130,7 +129,7 @@ enum MainMenu {
         return main
     }
 
-    /// Called at launch and whenever containers.json changes, so the ⌃⌘1–9
+    /// Called at launch and whenever the containers in settings.json change, so the ⌃⌘1–9
     /// shortcuts always match the file.
     static func rebuildContainerMenus() {
         ContainerMenus.fill(newTabInContainer, action: #selector(BrowserWindowController.newTabInContainer(_:)),

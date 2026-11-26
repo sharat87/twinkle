@@ -81,6 +81,21 @@ let ddg = "https://duckduckgo.com/?q=%s"
         #expect(!s.blocks(on: "example.com"))
         #expect(s.blocks(on: "notexample.com"))
     }
+
+    @Test func containersLiveInTheSameFile() throws {
+        let json = ##"{"adBlocking": false, "containers": [{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Work"}]}"##
+        let file = try JSONDecoder().decode(SettingsFile.self, from: Data(json.utf8))
+        #expect(file.settings.adBlocking == false)
+        #expect(file.containers?.map(\.name) == ["Work"])
+
+        let missing = try JSONDecoder().decode(SettingsFile.self, from: Data(#"{"adBlocking": false}"#.utf8))
+        #expect(missing.containers == nil)
+
+        let again = try JSONDecoder().decode(SettingsFile.self, from: JSONEncoder().encode(file))
+        #expect(again == file)
+        let keys = try JSONSerialization.jsonObject(with: JSONEncoder().encode(file)) as! [String: Any]
+        #expect(keys["containers"] != nil && keys["searchURL"] != nil)
+    }
 }
 
 @Suite struct FilterConverterTests {

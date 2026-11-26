@@ -9,8 +9,8 @@ extension Notification.Name {
     static let status = Notification.Name("TwinkleStatus")
 }
 
-/// Settings, containers and the data store for each container. Both files are
-/// read again whenever the app comes to the front, so editing them in a text
+/// Settings, containers and the data store for each container. settings.json
+/// (which holds the containers too) is read again whenever the app comes to the front, so editing them in a text
 /// editor takes effect as soon as you switch back.
 @MainActor
 final class AppState {
@@ -21,12 +21,10 @@ final class AppState {
     private(set) var containers: [Container] = []
 
     private var settingsDate: Date?
-    private var containersDate: Date?
     private var settingsBroken = false
     private var stores: [UUID: WKWebsiteDataStore] = [:]
 
     static let settingsFile = "settings.json"
-    static let containersFile = "containers.json"
     static let sessionFile = "session.json"
     static let zoomFile = "zoom.json"
 
@@ -105,7 +103,7 @@ final class AppState {
 
     /// A profile's own id for a container's store (nil: no container), so a
     /// profile never shares cookies with the usual Twinkle, even when its
-    /// containers.json was copied from there.
+    /// settings.json was copied from there.
     private func storeID(_ container: UUID?) -> UUID? {
         guard let profileID else { return container }
         let key = profileID.uuidString + (container?.uuidString ?? "default")
@@ -115,63 +113,90 @@ final class AppState {
         return NSUUID(uuidBytes: bytes) as UUID
     }
 
-    /// Reads the files again if they changed on disk. Missing files are
+    /// Reads settings.json again if it changed on disk. A missing file is
     /// written out with defaults so there is something to edit.
     func reload() {
-        if !files.exists(Self.settingsFile) { try? files.save(Settings(), to: Self.settingsFile) }
-        if !files.exists(Self.containersFile) { try? files.save(ContainerList.starter, to: Self.containersFile) }
+        mergeContainersFile()
+        if !files.exists(Self.settingsFile) { try? files.save(SettingsFile(), to: Self.settingsFile) }
 
-        let sDate = files.modificationDate(Self.settingsFile)
-        if sDate != settingsDate {
-            settingsDate = sDate
-            do {
-                let loaded = try files.load(Settings.self, from: Self.settingsFile) ?? Settings()
-                settingsBroken = false
-                if loaded != settings {
-                    settings = loaded
-                    NotificationCenter.default.post(name: .settingsChanged, object: nil)
-                }
-            } catch {
-                settingsBroken = true
-                Status.show("settings.json has an error and was not applied: \(Self.describe(error))", sticky: true)
-            }
+        let date = files.modificationDate(Self.settingsFile)
+        guard date != settingsDate else { return }
+        settingsDate = date
+        let loaded: SettingsFile
+        do {
+            loaded = try files.load(SettingsFile.self, from: Self.settingsFile) ?? SettingsFile()
+        } catch {
+            settingsBroken = true
+            Status.show("settings.json has an error and was not applied: \(Self.describe(error))", sticky: true)
+            return
         }
+        settingsBroken = false
+        if loaded.settings != settings {
+            settings = loaded.settings
+            NotificationCenter.default.post(name: .settingsChanged, object: nil)
+        }
+        // A missing "containers" key reads as no containers, but doesn't
+        // count as read cleanly: their data stays (removeOrphanedStores).
+        containersInFile = loaded.containers != nil
+        containersLoaded = containersLoaded || containersInFile
+        let list = loaded.containers ?? []
+        if list != containers {
+            containers = list
+            NotificationCenter.default.post(name: .containersChanged, object: nil)
+        }
+    }
 
-        let cDate = files.modificationDate(Self.containersFile)
-        if cDate != containersDate {
-            containersDate = cDate
-            do {
-                let loaded = try files.load(ContainerList.self, from: Self.containersFile)?.containers ?? []
-                containersLoaded = true
-                if loaded != containers {
-                    containers = loaded
-                    NotificationCenter.default.post(name: .containersChanged, object: nil)
-                }
-            } catch {
-                Status.show("containers.json has an error and was not applied: \(Self.describe(error))", sticky: true)
+    /// Containers used to have a file of their own. Its list moves into
+    /// settings.json (unless that has one already) and the file goes.
+    private func mergeContainersFile() {
+        let old = "containers.json"
+        guard files.exists(old) else { return }
+        do {
+            let list = try files.load(ContainerList.self, from: old)?.containers ?? []
+            var file = try files.load(SettingsFile.self, from: Self.settingsFile) ?? SettingsFile()
+            if file.containers == nil {
+                file.containers = list
+                try files.save(file, to: Self.settingsFile)
             }
+            try FileManager.default.removeItem(at: files.url(old))
+        } catch {
+            Status.show("Couldn't move containers.json into settings.json: \(Self.describe(error))", sticky: true)
         }
     }
 
     func updateSettings(_ change: (inout Settings) -> Void) {
+        var changed = settings
+        change(&changed)
+        guard save(settings: changed, containers: containersInFile ? containers : nil) else { return }
+        NotificationCenter.default.post(name: .settingsChanged, object: nil)
+    }
+
+    /// Writes settings.json, unless it has an error: a typo in a hand-edited
+    /// file is reported, never overwritten.
+    /// nil `containers` leaves the key out, as it was.
+    private func save(settings: Settings, containers: [Container]?) -> Bool {
         guard !settingsBroken else {
             Status.show("Fix settings.json first; Twinkle won't overwrite it while it has an error.", sticky: true)
-            return
+            return false
         }
-        change(&settings)
-        try? files.save(settings, to: Self.settingsFile)
+        self.settings = settings
+        self.containers = containers ?? []
+        containersInFile = containers != nil
+        try? files.save(SettingsFile(settings: settings, containers: containers), to: Self.settingsFile)
         settingsDate = files.modificationDate(Self.settingsFile)
-        NotificationCenter.default.post(name: .settingsChanged, object: nil)
+        return true
     }
 
     // MARK: Containers
 
-    /// containers.json was read without an error at least once.
+    /// The containers in settings.json were read without an error at least once.
     private var containersLoaded = false
+    /// settings.json has a "containers" key.
+    private var containersInFile = false
 
     /// Deletes the WebKit data stores (cookies, storage, cache) of containers
-    /// no longer in containers.json, and of old test profiles. Only the usual
-    /// Twinkle does this, at launch, and only once containers.json has been
+    /// no longer in settings.json, and of old test profiles. Only the usual
+    /// Twinkle does this, at launch, and only once settings.json has been
     /// read cleanly, so a broken file never costs a container its cookies.
     func removeOrphanedStores() async {
         guard profile == nil, containersLoaded else { return }
@@ -194,18 +219,19 @@ final class AppState {
     }
 
     /// Makes `host`'s site always open in `container` (nil: in whatever
-    /// container the tab is in) and saves containers.json.
+    /// container the tab is in) and saves settings.json.
     func assign(host: String, to container: UUID?) {
         var list = ContainerList(containers: containers)
         list.assign(host: host, to: container)
         saveContainers(list.containers)
     }
 
-    private func saveContainers(_ list: [Container]) {
-        containers = list
-        try? files.save(ContainerList(containers: containers), to: Self.containersFile)
-        containersDate = files.modificationDate(Self.containersFile)
+    @discardableResult
+    private func saveContainers(_ list: [Container]) -> Bool {
+        // An empty list doesn't add a "containers" key that was missing.
+        guard save(settings: settings, containers: containersInFile || !list.isEmpty ? list : nil) else { return false }
         NotificationCenter.default.post(name: .containersChanged, object: nil)
+        return true
     }
 
     // MARK: Temporary containers
@@ -234,12 +260,11 @@ final class AppState {
         stores[id] = nil
     }
 
-    @discardableResult
-    func addContainer(named name: String) -> Container {
+    /// nil when settings.json has an error, so the container couldn't be saved.
+    func addContainer(named name: String) -> Container? {
         let list = ContainerList(containers: containers)
         let container = Container(name: name, color: list.nextColor())
-        saveContainers(containers + [container])
-        return container
+        return saveContainers(containers + [container]) ? container : nil
     }
 
     /// The cookie jar, storage and cache for a container. nil is "no

@@ -76,3 +76,30 @@ public struct Settings: Codable, Equatable, Sendable {
         return !adBlockingOffFor.contains { Hosts.covers($0, host) }
     }
 }
+
+/// `settings.json` as a whole: the settings, and the containers under
+/// `"containers"`. `containers` is nil when the key is missing, which is told
+/// apart from an empty list so a deleted key never costs a container its data.
+public struct SettingsFile: Codable, Equatable, Sendable {
+    public var settings: Settings
+    public var containers: [Container]?
+
+    public init(settings: Settings = Settings(), containers: [Container]? = ContainerList.starter.containers) {
+        self.settings = settings
+        self.containers = containers
+    }
+
+    enum CodingKeys: String, CodingKey { case containers }
+
+    public init(from decoder: Decoder) throws {
+        settings = try Settings(from: decoder)
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        containers = try c.decodeIfPresent([Container].self, forKey: .containers)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try settings.encode(to: encoder)
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(containers, forKey: .containers)
+    }
+}

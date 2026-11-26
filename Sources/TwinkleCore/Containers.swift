@@ -33,7 +33,7 @@ public struct Container: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-/// `containers.json`.
+/// The `containers` in settings.json.
 public struct ContainerList: Codable, Equatable, Sendable {
     public var containers: [Container]
 

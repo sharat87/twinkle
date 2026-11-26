@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        // Picks up hand edits to settings.json and containers.json.
+        // Picks up hand edits to settings.json.
         AppState.shared.reload()
     }
 
@@ -85,10 +85,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func openSettings(_ sender: Any?) {
         edit(AppState.shared.files.url(AppState.settingsFile))
-    }
-
-    @objc func openContainers(_ sender: Any?) {
-        edit(AppState.shared.files.url(AppState.containersFile))
     }
 
     @objc func openBookmarks(_ sender: Any?) {

@@ -1194,8 +1194,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     @objc func newContainer(_ sender: Any?) {
         Dialogs.askForName(title: "New Container", placeholder: "Name, like Work or Banking", in: window) { [weak self] name in
-            guard let self, let name else { return }
-            let container = AppState.shared.addContainer(named: name)
+            guard let self, let name, let container = AppState.shared.addContainer(named: name) else { return }
             self.openTab(url: nil, container: container.id, at: self.selected + 1)
         }
     }
