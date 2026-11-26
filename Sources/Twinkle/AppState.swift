@@ -160,15 +160,24 @@ final class AppState {
             Status.show("Fix settings.json first; Twinkle won't overwrite it while it has an error.", sticky: true)
             return false
         }
+        let newContainers = containers.map { $0 ?? [] } ?? self.containers
+        let newInFile = containers.map { $0 != nil } ?? containersInFile
+        let file = SettingsFile(settings: settings ?? self.settings, containers: newInFile ? newContainers : nil,
+                                domains: domains ?? self.domains)
+        // Nothing changes unless it's written: two containers with one name
+        // can't be, as names are the keys of "containers".
+        do {
+            try files.save(file, to: Self.settingsFile)
+        } catch {
+            Status.show("Couldn't save settings.json: \(error.localizedDescription)", sticky: true)
+            return false
+        }
         if let settings { self.settings = settings }
-        if let containers {
-            self.containers = containers ?? []
-            containersInFile = containers != nil
+        if containers != nil {
+            self.containers = newContainers
+            containersInFile = newInFile
         }
         if let domains { self.domains = domains }
-        let file = SettingsFile(settings: self.settings, containers: containersInFile ? self.containers : nil,
-                                domains: self.domains)
-        try? files.save(file, to: Self.settingsFile)
         settingsDate = files.modificationDate(Self.settingsFile)
         return true
     }
@@ -266,8 +275,13 @@ final class AppState {
         stores[id] = nil
     }
 
-    /// nil when settings.json has an error, so the container couldn't be saved.
+    /// nil when settings.json has an error, so the container couldn't be
+    /// saved, or there's already a container by that name.
     func addContainer(named name: String) -> Container? {
+        if containers.contains(where: { $0.name.lowercased() == name.lowercased() }) {
+            Status.show("There's already a container called \(name).")
+            return nil
+        }
         let list = ContainerList(containers: containers)
         let container = Container(name: name, color: list.nextColor())
         return saveContainers(containers + [container]) ? container : nil
