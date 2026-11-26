@@ -6,6 +6,7 @@
 #   ./debug.sh select <index>           bring a tab to the front
 #   ./debug.sh type <text>              ⌘L, then type into the address field
 #   ./debug.sh key <down|up|enter|cmd-enter|tab|escape|delete>
+#   ./debug.sh key <ctrl-tab|ctrl-shift-tab|ctrl-up>   ⌃Tab switcher: step, let go of ⌃
 #   ./debug.sh action <selector:>        run a menu command
 #   ./debug.sh mouse <button>           click a mouse button mid-window (3 back, 4 forward)
 #   ./debug.sh appearance <light|dark|system>   for screenshots of both

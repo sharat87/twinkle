@@ -176,6 +176,8 @@ extension BrowserWindowController {
                     "url": tab.url?.absoluteString ?? "",
                     "title": tab.pageTitle,
                     "loading": tab.isLoading,
+                    "playingAudio": tab.isPlayingAudio,
+                    "selectedAt": tab.selectedAt,
                     "progress": tab.progress,
                     "hasWebView": tab.webView != nil,
                     "unloaded": tab.isUnloaded,

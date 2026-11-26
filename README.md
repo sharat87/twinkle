@@ -18,7 +18,7 @@ A minimal web browser for macOS, built on the system's WebKit. Vibed just for my
 
 ## What's there
 
-- **Tabs down the right**, one address field, the page. No start page, no accounts.
+- **Tabs down the right**, one address field, the page. No start page, no accounts. A speaker marks tabs playing sound; ⌃Tab goes back through tabs in the order you used them.
 - **Containers**, like Firefox's Multi-Account Containers: tabs in one window, each container with its own cookies, storage and cache. Sites can be assigned to a container so they always open there.
 - **Temporary containers**: a throwaway cookie jar, kept only in memory and gone when its last tab closes.
 - **Idle tabs unload** after 30 minutes in the background, freeing their memory, and come back with their history when clicked. Tabs playing sound or holding a half-filled form are left alone.
@@ -131,7 +131,7 @@ A site covers its subdomains, and the most specific entry wins: here `mail.examp
 |---|---|
 | `⌘T` new tab (same container) · `⌃⌘0` new tab, no container · `⌃⌘1`–`9` new tab in container · `⌥⌘T` new temporary container | `⌘W` close · `⇧⌘T` reopen closed tab |
 | `⌘L` address · `⌘F` find · `⌘G` / `⇧⌘G` next / previous | `⌘[` / `⌘]` back / forward · `⌘R` reload · `⌥⌘R` reload from origin |
-| `⌃Tab` / `⌃⇧Tab`, `⇧⌘]` / `⇧⌘[` next / previous tab · `⌘1`–`⌘9` jump · `⇧⌘↑` / `⇧⌘↓` move tab up / down | `⌘+` (or `⌘=`) / `⌘-` / `⌘0` zoom, remembered per site · `⌃⌘S` tab list · `⇧⌘N` new container |
+| `⌃Tab` recently used tabs (hold `⌃`, tap Tab to go further back, `⇧` reverses, Escape cancels) · `⇧⌘]` / `⇧⌘[` next / previous tab · `⌘1`–`⌘9` jump · `⇧⌘↑` / `⇧⌘↓` move tab up / down | `⌘+` (or `⌘=`) / `⌘-` / `⌘0` zoom, remembered per site · `⌃⌘S` tab list · `⇧⌘N` new container |
 | `⌥⇧⌘⌫` clear cookies and data for this site (Tools menu): everything the tab's container holds for the site, then a reload. For sign-ins that get stuck, like AWS. | |
 
 ⌘-click or middle-click a link to open it in a background tab in the same container; add ⇧ to switch to it. Middle-click a tab to close it. Right-click a tab to reopen it in another container (or a new temporary one), or to unload it now. Right-click a page › Inspect Element opens Safari's Web Inspector.

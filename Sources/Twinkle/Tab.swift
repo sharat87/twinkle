@@ -36,6 +36,13 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     private var pendingURL: URL?
     private var savedTitle: String
     private var observations: [NSKeyValueObservation] = []
+    private var audioObservation: KeyObserver?
+    /// Whether the page is making sound right now (WebKit's own media
+    /// state, so it covers <video>, Web Audio and DRM video alike).
+    private(set) var isPlayingAudio = false
+    /// When the tab last came to the front, in the window's own count:
+    /// the order ⌃Tab goes back through.
+    var selectedAt = 0
 
     /// Opened by a page (window.open). Stays in its opener's container even
     /// on assigned sites, since sign-in pop-ups talk back to their opener.
@@ -242,6 +249,11 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func close() {
         observations = []
+        audioObservation = nil
+        if isPlayingAudio {
+            isPlayingAudio = false
+            host?.tabDidChange(self)
+        }
         webView?.stopLoading()
         webView?.navigationDelegate = nil
         webView?.uiDelegate = nil
@@ -293,6 +305,15 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
             webView.observe(\.estimatedProgress) { v, _ in changed(v) },
             webView.observe(\.hasOnlySecureContent) { v, _ in changed(v) },
         ]
+        // `_isPlayingAudio` is WebKit SPI (Safari's speaker icon), observable
+        // with KVO; there's no public equivalent that reports changes.
+        audioObservation = KeyObserver(webView, "_isPlayingAudio") { [weak self] value in
+            guard let self else { return }
+            let playing = (value as? Bool) ?? false
+            guard playing != self.isPlayingAudio else { return }
+            self.isPlayingAudio = playing
+            self.host?.tabDidChange(self)
+        }
         return webView
     }
 
@@ -603,5 +624,32 @@ extension WKPreferences {
         default:
             return
         }
+    }
+}
+
+/// KVO on a key that has no Swift key path (WebKit SPI); stops observing
+/// when released.
+final class KeyObserver: NSObject {
+    private weak var object: NSObject?
+    private let key: String
+    private let changed: @MainActor (Any?) -> Void
+
+    init?(_ object: NSObject, _ key: String, changed: @escaping @MainActor (Any?) -> Void) {
+        guard object.responds(to: NSSelectorFromString(key)) else { return nil }
+        self.object = object
+        self.key = key
+        self.changed = changed
+        super.init()
+        object.addObserver(self, forKeyPath: key, options: [.initial, .new], context: nil)
+    }
+
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?,
+                                           change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+        let value = change?[.newKey] as? Bool
+        MainActor.assumeIsolated { changed(value) }
+    }
+
+    deinit {
+        object?.removeObserver(self, forKeyPath: key)
     }
 }

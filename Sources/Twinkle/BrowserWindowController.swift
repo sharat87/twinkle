@@ -54,6 +54,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     private var keyMonitor: Any?
     private var mouseMonitor: Any?
     private var syncingSelection = false
+    /// Counts tabs coming to the front, for `Tab.selectedAt`.
+    private var selectionCount = 0
+    /// While ⌃ is held after ⌃Tab: the tabs, most recently used first, and
+    /// which one ⌃Tab has got to.
+    private var switcher: (order: [Tab], position: Int)?
 
     var current: Tab? { tabs.indices.contains(selected) ? tabs[selected] : nil }
 
@@ -366,6 +371,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         let tab = tabs[index]
         let changed = index != selected || pageArea.subviews.first !== tab.webView
         if changed { current?.markActive() }
+        if switcher == nil {
+            selectionCount += 1
+            tab.selectedAt = selectionCount
+        }
         selected = index
         if changed {
             pageArea.subviews.forEach { $0.removeFromSuperview() }
@@ -758,6 +767,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     var debugTypeMs: Double { get { Self.typeMs } set { Self.typeMs = newValue } }
 
     func debugKey(_ key: String) {
+        switch key {
+        case "ctrl-tab": return stepSwitcher(backwards: false)
+        case "ctrl-shift-tab": return stepSwitcher(backwards: true)
+        case "ctrl-up": return finishSwitcher(commit: true)
+        default: break
+        }
         guard let editor = addressField.currentEditor() as? NSTextView else { return }
         let selectors: [String: Selector] = [
             "down": #selector(NSResponder.moveDown(_:)), "up": #selector(NSResponder.moveUp(_:)),
@@ -809,6 +824,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     func windowDidResignKey(_ notification: Notification) {
+        finishSwitcher(commit: true)
         suggestions.hide()
     }
 
@@ -1036,6 +1052,54 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         select((selected - 1 + tabs.count) % tabs.count)
     }
 
+    /// The menu item for ⌃Tab: straight to the tab used before this one.
+    /// The key itself is handled by the key monitor, which cycles.
+    @objc func showRecentTab(_ sender: Any?) {
+        let order = recentTabs()
+        guard order.count > 1, let i = index(of: order[1]) else { return }
+        select(i)
+    }
+
+    /// Every tab, the front one first, then the most recently used.
+    private func recentTabs() -> [Tab] {
+        let front = current
+        return tabs.enumerated()
+            .sorted { a, b in
+                if (a.element === front) != (b.element === front) { return a.element === front }
+                if a.element.selectedAt != b.element.selectedAt { return a.element.selectedAt > b.element.selectedAt }
+                return a.offset < b.offset
+            }
+            .map(\.element)
+    }
+
+    /// ⌃Tab (⌃⇧Tab backwards) while ⌃ is held steps through the tabs in the
+    /// order they were used, marking the candidate in the tab list; letting
+    /// go of ⌃ shows it. With the tab list hidden, each step shows its tab.
+    private func stepSwitcher(backwards: Bool) {
+        var state = switcher ?? (recentTabs(), 0)
+        guard state.order.count > 1 else { return }
+        let n = state.order.count
+        state.position = (state.position + (backwards ? n - 1 : 1)) % n
+        switcher = state
+        guard let i = index(of: state.order[state.position]) else { return }
+        if tabListItem.isCollapsed {
+            select(i)
+        } else {
+            syncingSelection = true
+            table.selectRowIndexes(IndexSet(integer: i), byExtendingSelection: false)
+            table.scrollRowToVisible(i)
+            syncingSelection = false
+        }
+    }
+
+    private func finishSwitcher(commit: Bool) {
+        guard let state = switcher else { return }
+        switcher = nil
+        let start = state.order.first.flatMap(index(of:))
+        let chosen = commit ? index(of: state.order[state.position]) : start
+        if let chosen { select(chosen) } else { syncTableSelection() }
+    }
+
     @objc func moveTabUp(_ sender: Any?) {
         moveTab(from: selected, to: selected - 1)
     }
@@ -1156,13 +1220,22 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     // MARK: Keys
 
-    /// ⌃Tab and ⌃⇧Tab, which menus can't reliably claim from the web view.
+    /// ⌃Tab and ⌃⇧Tab, which menus can't reliably claim from the web view,
+    /// and letting go of ⌃ (or Escape) to end them.
     private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.window, event.keyCode == 48 else { return event }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+            guard let self, event.window === self.window else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard flags.contains(.control), !flags.contains(.command) else { return event }
-            if flags.contains(.shift) { self.previousTab(nil) } else { self.nextTab(nil) }
+            if event.type == .flagsChanged {
+                if self.switcher != nil, !flags.contains(.control) { self.finishSwitcher(commit: true) }
+                return event
+            }
+            if self.switcher != nil, event.keyCode == 53 {
+                self.finishSwitcher(commit: false)
+                return nil
+            }
+            guard event.keyCode == 48, flags.contains(.control), !flags.contains(.command) else { return event }
+            self.stepSwitcher(backwards: flags.contains(.shift))
             return nil
         }
         // The side buttons on a mouse (3 and 4, counting from 0) go back and
@@ -1296,6 +1369,7 @@ final class TabCell: NSTableCellView {
     private let favicon = NSImageView()
     private let title = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
+    private let speaker = NSImageView()
 
     init() {
         super.init(frame: .zero)
@@ -1308,7 +1382,10 @@ final class TabCell: NSTableCellView {
         spinner.isDisplayedWhenStopped = false
         textField = title
         favicon.imageScaling = .scaleProportionallyUpOrDown
-        for v in [favicon, title, spinner] {
+        speaker.image = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "Playing audio")?
+            .withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
+        speaker.contentTintColor = .secondaryLabelColor
+        for v in [favicon, title, spinner, speaker] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
@@ -1326,6 +1403,8 @@ final class TabCell: NSTableCellView {
             spinner.centerYAnchor.constraint(equalTo: centerYAnchor),
             spinner.widthAnchor.constraint(equalToConstant: 14),
             spinner.heightAnchor.constraint(equalToConstant: 14),
+            speaker.centerXAnchor.constraint(equalTo: spinner.centerXAnchor),
+            speaker.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
 
@@ -1343,7 +1422,9 @@ final class TabCell: NSTableCellView {
         favicon.image = tab.icon ?? Self.placeholder
         favicon.alphaValue = tab.isUnloaded ? 0.5 : 1
         toolTip = tab.url?.absoluteString
-        if tab.isLoading { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
+        // Sound wins: a media file can play long before it has all loaded.
+        speaker.isHidden = !tab.isPlayingAudio
+        if tab.isLoading && !tab.isPlayingAudio { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
     }
 }
 
@@ -1439,7 +1520,7 @@ final class TabRowView: NSTableRowView {
         let bottomInset: CGFloat = continuesBelow ? 0 : 6
         let minYInset = isFlipped ? topInset : bottomInset
         let maxYInset = isFlipped ? bottomInset : topInset
-        let rect = NSRect(x: 6, y: minYInset, width: 5, height: bounds.height - minYInset - maxYInset)
+        let rect = NSRect(x: 4, y: minYInset, width: 4, height: bounds.height - minYInset - maxYInset)
         guard rect.height > 0 else { return }
 
         let roundMinY = isFlipped ? !continuesAbove : !continuesBelow
