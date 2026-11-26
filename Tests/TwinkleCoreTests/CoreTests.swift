@@ -457,3 +457,11 @@ let ddg = "https://duckduckgo.com/?q=%s"
         #expect(all.count == 2)
     }
 }
+
+@Suite struct HTTPStatusTests {
+    @Test func text() {
+        #expect(HTTPStatus.text(200) == "200 OK")
+        #expect(HTTPStatus.text(404) == "404 Not Found")
+        #expect(HTTPStatus.text(599) == "599")
+    }
+}

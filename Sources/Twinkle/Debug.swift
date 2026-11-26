@@ -68,10 +68,25 @@ enum Debug {
         // `./debug.sh mouse <button>`: a click of that mouse button in the
         // middle of the window (3 is the back side button, 4 forward),
         // queued like a real one so event monitors see it.
+        // `./debug.sh mouse "left <x> <y>"`: a left click at that point,
+        // in points from the window's top left, hit-tested like a real one
+        // (so the title bar gets it if it would).
         DistributedNotificationCenter.default().addObserver(forName: name("mouse"), object: nil, queue: .main) { note in
-            let button = Int(note.object as? String ?? "") ?? 3
+            let words = (note.object as? String ?? "").split(separator: " ")
             MainActor.assumeIsolated {
                 guard let window = controller()?.window, let view = window.contentView else { return }
+                if words.first == "left", words.count == 3, let x = Double(words[1]), let y = Double(words[2]) {
+                    let point = NSPoint(x: x, y: window.frame.height - y)
+                    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                        if let event = NSEvent.mouseEvent(
+                            with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+                            NSApp.postEvent(event, atStart: false)
+                        }
+                    }
+                    return
+                }
+                let button = Int(words.first ?? "") ?? 3
                 let point = NSPoint(x: view.bounds.midX, y: view.bounds.midY)
                 for type in [NSEvent.EventType.otherMouseDown, .otherMouseUp] {
                     guard let event = NSEvent.mouseEvent(
@@ -165,10 +180,9 @@ enum Debug {
 }
 
 extension BrowserWindowController {
-    /// Whether the address field is on screen rather than in the toolbar's
-    /// overflow menu.
+    /// Whether the address field is on screen.
     var addressFieldVisible: Bool {
-        window?.toolbar?.visibleItems?.contains { $0.itemIdentifier == .address } ?? false
+        addressField.window != nil && !addressField.isHiddenOrHasHiddenAncestor && addressField.frame.width > 0
     }
 
     func debugState() -> [String: Any] {
@@ -182,6 +196,7 @@ extension BrowserWindowController {
             "tabs": tabs.map { tab -> [String: Any] in
                 [
                     "url": tab.url?.absoluteString ?? "",
+                    "status": tab.statusCode ?? 0,
                     "title": tab.pageTitle,
                     "loading": tab.isLoading,
                     "playingAudio": tab.isPlayingAudio,

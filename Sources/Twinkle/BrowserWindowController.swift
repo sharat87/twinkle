@@ -12,15 +12,13 @@ enum UI {
     static let font = NSFont.systemFont(ofSize: textSize)
 }
 
-extension NSToolbarItem.Identifier {
-    static let address = NSToolbarItem.Identifier("address")
-}
-
-/// The window: tabs down the left, the address field in the toolbar, the page.
+/// The window: the address row and the page on the left, the tab list down
+/// the right, full height. No toolbar: the address row is an ordinary view
+/// level with the traffic lights, so AppKit's toolbar styling never touches it.
 @MainActor
 final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHost,
     NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSSearchFieldDelegate,
-    NSToolbarDelegate, NSMenuDelegate, NSMenuItemValidation {
+    NSMenuDelegate, NSMenuItemValidation {
 
     static let tabRowHeight: CGFloat = 42
 
@@ -35,11 +33,18 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     private let statusButton = NSButton(title: "", target: nil, action: nil)
     private let statusIcon = NSImageView()
     private let statusCancel = NSButton()
-    private let addressField = NSTextField()
+    let addressField = NSTextField()
     private let securityIcon = NSImageView()
     private let badge = NSTextField(labelWithString: "")
     private let badgeBox = NSView()
-    private let addressBox = NSBox()
+    private let statusBadge = NSTextField(labelWithString: "")
+    private let statusBadgeBox = NSView()
+    private let addressRow = NSStackView()
+    /// Set by alignAddressRow(): the row level with the traffic lights, and
+    /// the page below it.
+    private var addressRowCenter: NSLayoutConstraint!
+    private var addressRowLeading: NSLayoutConstraint!
+    private var pageTop: NSLayoutConstraint!
     private let progressBar = NSView()
     private var progressWidth: NSLayoutConstraint!
     private var findBarHeight: NSLayoutConstraint!
@@ -71,6 +76,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
         window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        // An empty toolbar, only so the title bar is tall enough for the
+        // address row, with the traffic lights centred in it.
+        window.toolbar = NSToolbar(identifier: "TwinkleToolbar")
         window.toolbarStyle = .unifiedCompact
         window.titlebarSeparatorStyle = .none
         window.minSize = NSSize(width: 520, height: 320)
@@ -95,18 +104,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         split.splitView.autosaveName = AppState.shared.defaultsName("TwinkleTabList")
         window.contentViewController = split
 
-        let toolbar = NSToolbar(identifier: "TwinkleToolbar")
-        toolbar.delegate = self
-        toolbar.displayMode = .iconOnly
-        toolbar.allowsUserCustomization = false
-        window.toolbar = toolbar
-
         let frameName = AppState.shared.defaultsName("TwinkleWindow")
         if !window.setFrameUsingName(frameName) {
             window.setContentSize(NSSize(width: 1280, height: 820))
             window.center()
         }
         window.setFrameAutosaveName(frameName)
+        alignAddressRow()
 
         let center = NotificationCenter.default
         center.addObserver(forName: .status, object: nil, queue: .main) { [weak self] note in
@@ -162,6 +166,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         let scroll = NSScrollView()
         scroll.documentView = table
         scroll.drawsBackground = false
+        scroll.automaticallyAdjustsContentInsets = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
 
@@ -191,7 +196,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             root.addSubview(v)
         }
         NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: 4),
+            scroll.topAnchor.constraint(equalTo: root.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             scroll.bottomAnchor.constraint(equalTo: statusButton.topAnchor, constant: -6),
@@ -213,15 +218,15 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     private func makeContent() -> NSView {
         let root = NSView(frame: NSRect(x: 0, y: 0, width: 1050, height: 800))
 
-        // The address field lives in the toolbar (see toolbar(_:itemForItemIdentifier:)).
+        // A standard bezeled field: AppKit draws its text in the same place
+        // whether or not it's being edited.
         addressField.placeholderString = "Search or enter address"
-        // No bezel or focus ring: the rounded box around it is the field.
-        addressField.isBordered = false
-        addressField.drawsBackground = false
-        addressField.focusRingType = .none
+        addressField.isBezeled = true
+        addressField.bezelStyle = .roundedBezel
         addressField.font = NSFont(name: "Monaco", size: UI.textSize - 2) ?? .monospacedSystemFont(ofSize: UI.textSize - 2, weight: .regular)
         addressField.lineBreakMode = .byTruncatingTail
-        addressField.usesSingleLineMode = true
+        // Scrolls rather than wraps, so it's one line. Not usesSingleLineMode:
+        // that draws the text 3 points higher when not being edited.
         addressField.cell?.isScrollable = true
         addressField.target = self
         addressField.action = #selector(addressEntered(_:))
@@ -252,29 +257,32 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             securityIcon.heightAnchor.constraint(equalToConstant: 16),
         ])
 
-        let row = NSStackView(views: [badgeBox, securityIcon, addressField])
-        row.orientation = .horizontal
-        row.spacing = 6
-        row.alignment = .centerY
-        row.translatesAutoresizingMaskIntoConstraints = false
-        addressBox.boxType = .custom
-        addressBox.borderWidth = 0
-        addressBox.cornerRadius = 8
-        addressBox.fillColor = .clear
-        addressBox.contentViewMargins = .zero
-        addressBox.titlePosition = .noTitle
-        addressBox.contentView?.addSubview(row)
-        let inner = addressBox.contentView!
-        // A range, not a size: the toolbar gives the item whatever room is
-        // left. A large preferred width makes it overflow into the » menu.
+        // The response status, like `200 OK`, at the row's right end.
+        statusBadge.font = NSFont(name: "Monaco", size: UI.textSize - 4) ?? .monospacedSystemFont(ofSize: UI.textSize - 4, weight: .regular)
+        statusBadge.translatesAutoresizingMaskIntoConstraints = false
+        statusBadgeBox.wantsLayer = true
+        statusBadgeBox.layer?.cornerRadius = 6
+        statusBadgeBox.layer?.borderWidth = 1
+        statusBadgeBox.addSubview(statusBadge)
         NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: inner.leadingAnchor, constant: 8),
-            row.trailingAnchor.constraint(equalTo: inner.trailingAnchor, constant: -10),
-            row.centerYAnchor.constraint(equalTo: inner.centerYAnchor),
-            addressBox.heightAnchor.constraint(equalToConstant: 34),
-            addressBox.widthAnchor.constraint(greaterThanOrEqualToConstant: 240),
-            addressBox.widthAnchor.constraint(lessThanOrEqualToConstant: 4000),
+            statusBadge.leadingAnchor.constraint(equalTo: statusBadgeBox.leadingAnchor, constant: 6),
+            statusBadge.trailingAnchor.constraint(equalTo: statusBadgeBox.trailingAnchor, constant: -6),
+            statusBadge.centerYAnchor.constraint(equalTo: statusBadgeBox.centerYAnchor),
         ])
+        statusBadgeBox.isHidden = true
+
+        for v in [badgeBox, securityIcon, addressField, statusBadgeBox] { addressRow.addArrangedSubview(v) }
+        statusBadgeBox.heightAnchor.constraint(equalTo: addressField.heightAnchor).isActive = true
+        addressRow.orientation = .horizontal
+        addressRow.spacing = 8
+        addressRow.alignment = .centerY
+        addressRow.detachesHiddenViews = true
+        for v in [badgeBox, securityIcon, statusBadgeBox] {
+            v.setContentHuggingPriority(.required, for: .horizontal)
+            v.setContentCompressionResistancePriority(.required, for: .horizontal)
+        }
+        addressField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        addressField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         findField.placeholderString = "Find on page"
         findField.font = UI.font
@@ -298,7 +306,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         findBar.addArrangedSubview(done)
         findBar.isHidden = true
 
-        for v in [findBar, pageArea] {
+        for v in [addressRow, findBar, pageArea] {
             v.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(v)
         }
@@ -311,8 +319,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         root.addSubview(progressBar)
         progressWidth = progressBar.widthAnchor.constraint(equalToConstant: 0)
 
+        addressRowCenter = addressRow.centerYAnchor.constraint(equalTo: root.topAnchor, constant: 20)
+        addressRowLeading = addressRow.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 80)
+        pageTop = findBar.topAnchor.constraint(equalTo: root.topAnchor, constant: 40)
         NSLayoutConstraint.activate([
-            findBar.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor),
+            addressRowCenter,
+            addressRowLeading,
+            addressRow.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
+            pageTop,
             findBar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             findBar.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             findBarHeight,
@@ -320,7 +334,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             pageArea.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             pageArea.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             pageArea.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            progressBar.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor),
+            progressBar.topAnchor.constraint(equalTo: findBar.topAnchor),
             progressBar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             progressBar.heightAnchor.constraint(equalToConstant: 2),
             progressWidth,
@@ -328,22 +342,27 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         return root
     }
 
-    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.address]
-    }
-
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar)
-    }
-
-    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier,
-                 willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-        guard id == .address else { return nil }
-        let item = NSToolbarItem(itemIdentifier: id)
-        item.label = "Address"
-        item.view = addressBox
-        item.visibilityPriority = .high
-        return item
+    /// Puts the address row level with the traffic lights and just after
+    /// them, and the page below it. Reads where macOS put the
+    /// buttons, so it follows any title bar height or text size. In full
+    /// screen the buttons live elsewhere; the row then sits at the top.
+    private func alignAddressRow() {
+        guard let window, addressRowCenter != nil else { return }
+        addressRow.layoutSubtreeIfNeeded()
+        let rowHeight = max(addressRow.fittingSize.height, addressField.fittingSize.height)
+        var center = rowHeight / 2 + 6
+        var leading: CGFloat = 10
+        if let close = window.standardWindowButton(.closeButton),
+           let zoom = window.standardWindowButton(.zoomButton),
+           close.window === window, !close.isHiddenOrHasHiddenAncestor {
+            let c = close.convert(close.bounds, to: nil)
+            center = max(center, window.frame.height - c.midY)
+            leading = zoom.convert(zoom.bounds, to: nil).maxX + 12
+        }
+        let top = (center + rowHeight / 2 + 6).rounded()
+        if addressRowCenter.constant != center.rounded() { addressRowCenter.constant = center.rounded() }
+        if addressRowLeading.constant != leading.rounded() { addressRowLeading.constant = leading.rounded() }
+        if pageTop.constant != top { pageTop.constant = top }
     }
 
     // MARK: Tabs
@@ -453,16 +472,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
     }
 
-    private func displayAddress(for tab: Tab) -> String {
-        let s = tab.url?.absoluteString ?? ""
-        if tab.hasTLSError || tab.hasMixedContent { return s }
-        if tab.isHTTPS, let range = s.range(of: "https://", options: [.anchored, .caseInsensitive]) {
-            return String(s[range.upperBound...])
-        }
-        return s
-    }
-
-    private func updateSecurityIndicator(for tab: Tab, editing: Bool) {
+    private func updateSecurityIndicator(for tab: Tab) {
         if tab.hasTLSError {
             securityIcon.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill",
                                          accessibilityDescription: "TLS certificate error")
@@ -475,7 +485,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             securityIcon.contentTintColor = .systemOrange
             securityIcon.toolTip = "Page includes insecure content"
             securityIcon.isHidden = false
-        } else if tab.isHTTPS && !editing {
+        } else if tab.isHTTPS {
             securityIcon.image = NSImage(systemSymbolName: "lock.fill",
                                          accessibilityDescription: "HTTPS")
             securityIcon.contentTintColor = .systemGreen
@@ -487,14 +497,16 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
     }
 
-    /// The address field, security indicator, container badge, progress bar and window title.
+    /// The address field, security indicator, container badge, status,
+    /// progress bar and window title.
     private func updateChrome(editing: Bool? = nil) {
         guard let tab = current else { return }
         let editing = editing ?? (addressField.currentEditor() != nil)
         if !editing {
-            addressField.stringValue = displayAddress(for: tab)
+            addressField.stringValue = tab.url?.absoluteString ?? ""
         }
-        updateSecurityIndicator(for: tab, editing: editing)
+        updateSecurityIndicator(for: tab)
+        updateStatusBadge(for: tab)
         if let container = AppState.shared.container(tab.containerID) {
             badge.stringValue = container.name
             badgeBox.layer?.backgroundColor = NSColor(hex: container.color).cgColor
@@ -510,6 +522,21 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
         window?.title = WindowTitle.make(title: tab.pageTitle, url: tab.url,
                                          format: AppState.shared.settings.windowTitleFormat)
+    }
+
+    private func updateStatusBadge(for tab: Tab) {
+        guard let code = tab.statusCode else {
+            statusBadgeBox.isHidden = true
+            return
+        }
+        let color: NSColor = code >= 500 ? .systemRed : code >= 400 ? .systemOrange : .secondaryLabelColor
+        statusBadge.stringValue = HTTPStatus.text(code)
+        statusBadge.textColor = color
+        statusBadgeBox.effectiveAppearance.performAsCurrentDrawingAppearance {
+            statusBadgeBox.layer?.borderColor = color.withAlphaComponent(0.5).cgColor
+        }
+        statusBadgeBox.toolTip = "Response status of the page"
+        statusBadgeBox.isHidden = false
     }
 
     // MARK: TabHost
@@ -751,7 +778,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             updateChrome()
         }
         s.switchTo = { [unowned self] tab in
-            addressField.stringValue = displayAddress(for: tab)
+            addressField.stringValue = tab.url?.absoluteString ?? ""
             if let i = index(of: tab) { select(i) }
             window?.makeFirstResponder(current?.webView)
             updateChrome()
@@ -799,15 +826,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     func controlTextDidBeginEditing(_ obj: Notification) {
         guard (obj.object as? NSTextField) === addressField else { return }
-        if let tab = current {
-            if let full = tab.url?.absoluteString,
-               addressField.stringValue != full,
-               addressField.stringValue == displayAddress(for: tab) {
-                addressField.stringValue = full
-                (obj.userInfo?["NSFieldEditor"] as? NSTextView)?.string = full
-            }
-            updateSecurityIndicator(for: tab, editing: true)
-        }
         suggestions.began()
     }
 
@@ -823,8 +841,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     func windowDidResize(_ notification: Notification) {
+        alignAddressRow()
         suggestions.reposition()
     }
+
+    func windowDidEnterFullScreen(_ notification: Notification) { alignAddressRow() }
+    func windowDidExitFullScreen(_ notification: Notification) { alignAddressRow() }
 
     func windowDidResignKey(_ notification: Notification) {
         finishSwitcher(commit: true)
@@ -847,7 +869,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         if control === addressField, suggestions.handle(selector) { return true }
         if selector == #selector(NSResponder.cancelOperation(_:)) {
             if control === addressField {
-                addressField.stringValue = current.map { displayAddress(for: $0) } ?? ""
+                addressField.stringValue = current?.url?.absoluteString ?? ""
                 if let webView = current?.webView { window?.makeFirstResponder(webView) }
                 updateChrome()
                 return true
@@ -987,9 +1009,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         suggestions.prepare()
         if addressField.currentEditor() == nil {
             addressField.stringValue = current?.url?.absoluteString ?? ""
-        }
-        if let tab = current {
-            updateSecurityIndicator(for: tab, editing: true)
         }
         window?.makeFirstResponder(addressField)
         addressField.currentEditor()?.selectAll(nil)

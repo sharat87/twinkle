@@ -9,6 +9,7 @@
 #   ./debug.sh key <ctrl-tab|ctrl-shift-tab|ctrl-up>   ⌃Tab switcher: step, let go of ⌃
 #   ./debug.sh action <selector:>        run a menu command
 #   ./debug.sh mouse <button>           click a mouse button mid-window (3 back, 4 forward)
+#   ./debug.sh mouse "left <x> <y>"     left-click at x, y points from the window's top left
 #   ./debug.sh appearance <light|dark|system>   for screenshots of both
 # Writes state.json, window.png, page.png (switcher.png while the ⌃Tab list is up) to Twinkle's folder in its sandbox
 # container (~/Library/Containers/dev.twinkle.Twinkle/…/Twinkle/debug/).

@@ -30,6 +30,14 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// Whether the current page failed with a TLS or certificate error.
     private(set) var hasTLSError = false
     private(set) var tlsErrorMessage: String?
+    /// The HTTP status of the page on screen; nil for error pages, files,
+    /// and pages restored without a response yet.
+    private(set) var statusCode: Int?
+    /// The main-frame response of the navigation in progress.
+    private var responseStatus: Int?
+    /// Each back/forward entry's status, for pages that come back from
+    /// WebKit's page cache without a new response.
+    private var statusByItem: [WKBackForwardListItem: Int] = [:]
 
     private(set) var webView: WKWebView?
     /// Where the tab will go once its web view exists.
@@ -249,6 +257,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func close() {
         observations = []
+        statusByItem = [:]
         audioObservation = nil
         if isPlayingAudio {
             isPlayingAudio = false
@@ -379,6 +388,9 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
                  decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if response.isForMainFrame {
+            responseStatus = (response.response as? HTTPURLResponse)?.statusCode
+        }
         if !response.canShowMIMEType {
             decisionHandler(.download)
             return
@@ -422,6 +434,15 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         // The error page commits at the failed address: not a visit.
         showingErrorPage = errorPageLoading
         errorPageLoading = false
+        if showingErrorPage {
+            statusCode = nil
+        } else if let item = webView.backForwardList.currentItem {
+            if let status = responseStatus { statusByItem[item] = status }
+            statusCode = statusByItem[item]
+        } else {
+            statusCode = responseStatus
+        }
+        responseStatus = nil
         if !showingErrorPage {
             clearTLSError()
             if let url = webView.url {
@@ -437,6 +458,11 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         } else if webView.url?.host() != nil {
             icon = nil
         }
+        host?.tabDidChange(self)
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        responseStatus = nil
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
