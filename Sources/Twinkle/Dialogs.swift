@@ -69,6 +69,8 @@ final class PageDialog: NSView, NSTextFieldDelegate {
     /// What takes the keyboard while it's up: the first field, else itself.
     let focus: NSView?
     let title: String
+    /// Asking to open an app, so a page can't stack up more of them.
+    var isAppPrompt = false
 
     init(title: String, message: String?, fields: [NSTextField] = [], ok: String = "OK", cancel: String? = "Cancel",
          done: @escaping (Bool) -> Void) {

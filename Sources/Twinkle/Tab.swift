@@ -351,15 +351,18 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
             return
         }
 
-        // mailto:, zoommtg:, etc. go to the app that handles them. Sites
-        // often launch their app from a hidden iframe (Slack after sign-in
-        // does), so that counts when the page itself made the iframe go
-        // there; an ad's frame sending itself to an app doesn't.
+        // mailto:, zoommtg:, etc. go to the app that handles them: straight
+        // away for a link you click, after asking when the page goes there
+        // itself (Slack does after sign-in, maybe in the wrong container).
+        // Sites often do that from a hidden iframe, so that counts when the
+        // page itself made the iframe go there; an ad's frame sending
+        // itself to an app doesn't.
         let scheme = url.scheme?.lowercased() ?? ""
         if !Self.webSchemes.contains(scheme) {
-            if action.navigationType == .linkActivated || action.targetFrame?.isMainFrame != false
-                || action.sourceFrame.isMainFrame {
+            if action.navigationType == .linkActivated {
                 NSWorkspace.shared.open(url)
+            } else if action.targetFrame?.isMainFrame != false || action.sourceFrame.isMainFrame {
+                askToOpen(url, from: action.sourceFrame.securityOrigin.host)
             }
             decisionHandler(.cancel)
             return
@@ -385,6 +388,23 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
             Blocker.shared.tune(webView.configuration.userContentController, host: url.host())
         }
         decisionHandler(.allow)
+    }
+
+    /// Asks before a page sends you to an app, naming the app and the
+    /// container. Nothing happens for a link no app handles (macOS would
+    /// offer the App Store) or while the page is already asking.
+    private func askToOpen(_ url: URL, from host: String) {
+        guard let app = NSWorkspace.shared.urlForApplication(toOpen: url),
+              !dialogs.contains(where: { $0.isAppPrompt }) else { return }
+        let name = FileManager.default.displayName(atPath: app.path).replacingOccurrences(of: ".app", with: "")
+        let site = host.isEmpty ? "This page" : host
+        let container = AppState.shared.container(containerID).map { " in \($0.name)" } ?? ""
+        let dialog = PageDialog(title: "Open \(name)?", message: "\(site)\(container) wants to open \(name).",
+                                ok: "Open", cancel: "Don't Open") { ok in
+            if ok { NSWorkspace.shared.open(url) }
+        }
+        dialog.isAppPrompt = true
+        show(dialog)
     }
 
     /// The container `url` should open in instead of this tab's, if any.
