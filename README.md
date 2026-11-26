@@ -16,12 +16,15 @@ A minimal web browser for macOS, built on the system's WebKit. Vibed just for my
 - **No MCP.** Once AppleScript support is added, ask your agent to write AppleScript.
 - **Permissions are always denied.** Camera, microphone and screen capture are refused without asking. Location and web notifications aren't implemented at all.
 
+<img alt="Twinkle's Tools menu open over a GitHub page: every action is a menu item, and the address field is in Monaco so look-alike letters stand apart" src="docs/screenshot-menus.png" width="751">
+
 ## What's there
 
 - **Tabs down the right**, one address field, the page. No start page, no accounts. A speaker marks tabs playing sound; ⌃Tab goes back through tabs in the order you used them, listed beside the tab list while ⌃ is held.
 - **Containers**, like Firefox's Multi-Account Containers: tabs in one window, each container with its own cookies, storage and cache. Sites can be assigned to a container so they always open there.
 - **Temporary containers**: a throwaway cookie jar, kept only in memory and gone when its last tab closes.
 - **Idle tabs unload** after 30 minutes in the background, freeing their memory, and come back with their history when clicked. Tabs playing sound or holding a half-filled form are left alone.
+- **The address in Monaco**, a monospaced font, so look-alike letters (`l`, `I`, `1`; `O`, `0`) can't pass for each other in a lookalike domain.
 - **The page's host in the window title** (`Title (example.com)`), so KeePassXC auto-type matches sites without a browser extension.
 - **Ad and tracker blocking** with EasyList and EasyPrivacy (or any EasyList/uBlock-syntax list, or hosts file), compiled into WebKit content blockers that run before requests are made.
 - **JSON responses pretty-printed** and highlighted, with exact numbers and key order (Raw shows the original).
