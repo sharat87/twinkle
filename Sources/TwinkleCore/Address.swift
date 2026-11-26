@@ -91,6 +91,17 @@ public enum Address {
         }
     }
 
+    /// The `https:` address to try first for an `http:` one, or nil when it
+    /// should load as it is: local hosts, and addresses with a port (an
+    /// HTTP server on :8080 seldom answers TLS there).
+    public static func httpsUpgrade(_ url: URL) -> URL? {
+        guard url.scheme?.lowercased() == "http", url.port == nil,
+              let host = url.host()?.lowercased(), !host.isEmpty, !isLocal(host),
+              var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        parts.scheme = "https"
+        return parts.url
+    }
+
     /// Hosts that usually don't speak HTTPS: local machines and the LAN.
     static func isLocal(_ host: String) -> Bool {
         if host == "localhost" || host.hasPrefix("[") || isIPv4(host) { return true }

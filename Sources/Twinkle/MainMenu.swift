@@ -7,6 +7,8 @@ enum MainMenu {
     static let newTabInContainer = NSMenu(title: "New Tab in Container")
     static let reopenInContainer = NSMenu(title: "Reopen Tab in Container")
     static let assignSite = NSMenu(title: "Always Open This Site In")
+    /// Filled by the window controller (its delegate) each time it opens.
+    static let recentlyClosed = NSMenu(title: "Recently Closed")
 
     static func build(app: AppDelegate) -> NSMenu {
         let main = NSMenu()
@@ -44,6 +46,8 @@ enum MainMenu {
             item("Close Window", #selector(NSWindow.performClose(_:)), "w", [.command, .shift]),
             .separator(),
             item("Import from Safari…", #selector(AppDelegate.importFromSafari(_:)), "", target: app),
+            .separator(),
+            item("Print…", #selector(BrowserWindowController.printPage(_:)), "p"),
         ]))
 
         main.addItem(submenu("Edit", [
@@ -57,6 +61,7 @@ enum MainMenu {
             item("Select All", #selector(NSText.selectAll(_:)), "a"),
             .separator(),
             item("Copy Page Address", #selector(BrowserWindowController.copyAddress(_:)), "c", [.command, .shift]),
+            item("Copy Markdown Link", #selector(BrowserWindowController.copyMarkdownLink(_:)), "c", [.command, .option, .shift]),
             .separator(),
             item("Find…", #selector(BrowserWindowController.showFind(_:)), "f"),
             item("Find Next", #selector(BrowserWindowController.findNext(_:)), "g"),
@@ -82,6 +87,8 @@ enum MainMenu {
             item("Forward", #selector(BrowserWindowController.goForward(_:)), "]"),
             item("Show Tab History", #selector(BrowserWindowController.showTabHistory(_:)), "e"),
             item("Follow Link…", #selector(BrowserWindowController.followLink(_:)), "i"),
+            .separator(),
+            recentlyClosedItem(),
             .separator(),
             item("Bookmark This Page", #selector(BrowserWindowController.bookmarkPage(_:)), "d"),
             item("Edit Bookmarks…", #selector(AppDelegate.openBookmarks(_:)), target: app),
@@ -139,6 +146,12 @@ enum MainMenu {
                             target: nil, shortcuts: false, temporary: true)
         ContainerMenus.fill(assignSite, action: #selector(BrowserWindowController.assignSite(_:)),
                             target: nil, shortcuts: false, noneTitle: "Any Container")
+    }
+
+    private static func recentlyClosedItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Recently Closed", action: nil, keyEquivalent: "")
+        item.submenu = recentlyClosed
+        return item
     }
 
     /// A second shortcut for the item above it: hidden, but its key works.

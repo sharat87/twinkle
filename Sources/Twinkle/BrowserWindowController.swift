@@ -89,6 +89,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         window.tabbingMode = .disallowed
         super.init(window: window)
         window.delegate = self
+        MainMenu.recentlyClosed.delegate = self
 
         // The page on the left, the tab list on the right.
         let content = NSViewController()
@@ -698,8 +699,37 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         return true
     }
 
+    /// History › Recently Closed, newest first, each with its container's colour.
+    private func fillRecentlyClosed(_ menu: NSMenu) {
+        menu.removeAllItems()
+        for (index, closed) in closedTabs.enumerated().reversed().prefix(20) {
+            let url = URL(string: closed.tab.url)
+            var title = closed.tab.title.isEmpty ? (url?.host() ?? closed.tab.url) : closed.tab.title
+            if title.count > 60 { title = String(title.prefix(59)) + "…" }
+            let item = NSMenuItem(title: title, action: #selector(reopenRecentlyClosed(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            item.toolTip = closed.tab.url
+            if let container = AppState.shared.container(closed.tab.container), !closed.temporary {
+                item.image = .dot(NSColor(hex: container.color))
+            } else if closed.temporary {
+                item.image = .dot(NSColor(hex: "#8E8E93"))
+            }
+            menu.addItem(item)
+        }
+        if menu.items.isEmpty {
+            let none = NSMenuItem(title: "No Closed Tabs", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            menu.addItem(none)
+        }
+    }
+
     /// The tab list's right-click menu.
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === MainMenu.recentlyClosed {
+            fillRecentlyClosed(menu)
+            return
+        }
         guard menu === table.menu else { return }
         menu.removeAllItems()
         let row = table.clickedRow
@@ -1024,7 +1054,19 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     @objc func reopenClosedTab(_ sender: Any?) {
-        guard let (saved, temporary, history) = closedTabs.popLast(), let url = URL(string: saved.url) else { return }
+        reopenClosed(at: closedTabs.count - 1)
+    }
+
+    /// History › Recently Closed: the item's tag is its place in `closedTabs`.
+    @objc func reopenRecentlyClosed(_ sender: NSMenuItem) {
+        reopenClosed(at: sender.tag)
+    }
+
+    /// Brings a closed tab back in its own container, with its back/forward list.
+    private func reopenClosed(at index: Int) {
+        guard closedTabs.indices.contains(index) else { return }
+        let (saved, temporary, history) = closedTabs.remove(at: index)
+        guard let url = URL(string: saved.url) else { return }
         // A closed temporary container's data is gone; a new one stands in.
         var container = saved.container
         if temporary, AppState.shared.container(container) == nil {
@@ -1217,6 +1259,19 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         Status.show("Copied \(url.absoluteString)")
     }
 
+    /// Edit › Copy Markdown Link: `[title](address)`, for notes and chat.
+    @objc func copyMarkdownLink(_ sender: Any?) {
+        guard let tab = current, let url = tab.url else { return }
+        let link = Markdown.link(title: tab.title, url: url)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(link, forType: .string)
+        Status.show("Copied \(link)")
+    }
+
+    @objc func printPage(_ sender: Any?) {
+        current?.printPage()
+    }
+
     @objc func bookmarkPage(_ sender: Any?) {
         guard let tab = current, let url = tab.url, !tab.isBlank else { return }
         let title = tab.title.isEmpty ? (url.host() ?? url.absoluteString) : tab.title
@@ -1287,7 +1342,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
              #selector(reloadFromOrigin(_:)), #selector(findNext(_:)), #selector(findPrevious(_:)), #selector(showFind(_:)),
              #selector(followLink(_:)):
             return webView != nil
-        case #selector(copyAddress(_:)): return current?.url != nil
+        case #selector(copyAddress(_:)), #selector(copyMarkdownLink(_:)): return current?.url != nil
+        case #selector(printPage(_:)): return webView != nil
         case #selector(clearSiteData(_:)):
             let host = current?.url?.host().map(Hosts.siteKey)
             item.title = host.map { "Clear Cookies and Data for \($0)" } ?? "Clear Cookies and Data for This Site"

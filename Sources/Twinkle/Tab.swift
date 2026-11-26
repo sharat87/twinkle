@@ -92,6 +92,12 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// Each back/forward entry's status, for pages that come back from
     /// WebKit's page cache without a new response.
     private var statusByItem: [WKBackForwardListItem: Int] = [:]
+    /// An `http:` page being tried over HTTPS first: where it was going,
+    /// and the `https:` address tried instead.
+    private var upgrade: (from: URL, to: URL)?
+    /// Hosts whose HTTPS failed (or sent us back to HTTP) since launch,
+    /// so they load over HTTP without trying again.
+    private static var httpOnlyHosts: Set<String> = []
 
     private(set) var webView: WKWebView?
     /// Where the tab will go once its web view exists.
@@ -344,6 +350,8 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
             config.applicationNameForUserAgent = UserAgent.suffix
             config.preferences.isElementFullscreenEnabled = true
             config.preferences.javaScriptCanOpenWindowsAutomatically = false
+            // Media waits for a click; pages can't start sound or video themselves.
+            config.mediaTypesRequiringUserActionForPlayback = .all
             let settings = AppState.shared.settings
             config.preferences.setMonospaceFont(settings.monospaceFont, size: settings.monospaceFontSize)
         }
@@ -452,6 +460,13 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
                 decisionHandler(.cancel)
                 return
             }
+            if let https = httpsFirst(url, action: action) {
+                decisionHandler(.cancel)
+                var request = URLRequest(url: https, timeoutInterval: 10)
+                request.mainDocumentURL = https
+                webView.load(request)
+                return
+            }
             if !errorPageLoading {
                 clearTLSError()
             }
@@ -490,6 +505,53 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
               assignment.container.id != containerID,
               assignment.site != exemptSite else { return nil }
         return assignment.container.id
+    }
+
+    /// The `https:` address to load instead of an `http:` page, like
+    /// Chrome's HTTPS-First mode: links, typed addresses and redirects, but
+    /// not form posts, reloads or back/forward, which load as they are. If
+    /// HTTPS fails, or the site sends us back to `http:`, the page loads
+    /// over HTTP and its host isn't tried again until the next launch.
+    private func httpsFirst(_ url: URL, action: WKNavigationAction) -> URL? {
+        guard url.scheme?.lowercased() == "http", let host = url.host()?.lowercased() else {
+            if url.scheme?.lowercased() != "https" { upgrade = nil }
+            return nil
+        }
+        if let upgrade, upgrade.to.host()?.lowercased() == host {
+            // The HTTPS site redirected to HTTP: it wants HTTP.
+            Self.httpOnlyHosts.insert(host)
+            self.upgrade = nil
+            return nil
+        }
+        guard !Self.httpOnlyHosts.contains(host),
+              (action.request.httpMethod ?? "GET").uppercased() == "GET",
+              ![.backForward, .reload, .formResubmitted, .formSubmitted].contains(action.navigationType),
+              let https = Address.httpsUpgrade(url) else { return nil }
+        upgrade = (url, https)
+        return https
+    }
+
+    /// Errors that mean the site doesn't do HTTPS (rather than that it's
+    /// down, which HTTP wouldn't fix).
+    private static let noHTTPSCodes: Set<Int> = tlsErrorCodes.union([
+        NSURLErrorCannotConnectToHost,
+        NSURLErrorNetworkConnectionLost,
+        NSURLErrorTimedOut,
+    ])
+
+    /// After a failed HTTPS try, loads the `http:` address it stood in for.
+    private func fallBackToHTTP(after error: NSError, in webView: WKWebView) -> Bool {
+        guard let upgrade else { return false }
+        self.upgrade = nil
+        let failing = error.userInfo[NSURLErrorFailingURLErrorKey] as? URL
+        guard let host = upgrade.to.host()?.lowercased(),
+              failing == nil || failing?.host()?.lowercased() == host,
+              Self.isTLSError(error) || (error.domain == NSURLErrorDomain && Self.noHTTPSCodes.contains(error.code))
+        else { return false }
+        Self.httpOnlyHosts.insert(host)
+        clearTLSError()
+        webView.load(URLRequest(url: upgrade.from))
+        return true
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
@@ -537,6 +599,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        if !errorPageLoading { upgrade = nil }
         // The error page commits at the failed address: not a visit.
         showingErrorPage = errorPageLoading
         errorPageLoading = false
@@ -575,6 +638,9 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        let e = error as NSError
+        if e.domain == NSURLErrorDomain && e.code == NSURLErrorCancelled { return }
+        if fallBackToHTTP(after: e, in: webView) { return }
         showError(error, in: webView)
     }
 
@@ -656,6 +722,39 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     func webView(_ webView: WKWebView, saveDataToFile data: Data, suggestedFilename: String,
                  mimeType: String?, originatingURL: URL?) {
         Downloads.shared.save(data, suggestedFilename: suggestedFilename, source: originatingURL, page: webView.url)
+    }
+
+    /// File › Print: the system print panel, with its own PDF button. Only
+    /// for the tab on screen, so a background tab can't bring it up.
+    func printPage() {
+        guard let webView, let window = host?.window, webView.window === window, window.attachedSheet == nil else { return }
+        let info = NSPrintInfo.shared.copy() as! NSPrintInfo
+        info.horizontalPagination = .fit
+        info.verticalPagination = .automatic
+        info.isHorizontallyCentered = false
+        info.isVerticallyCentered = false
+        let operation = webView.printOperation(with: info)
+        operation.jobTitle = title
+        operation.showsPrintPanel = true
+        operation.showsProgressPanel = true
+        // Without a frame WebKit prints blank pages.
+        operation.view?.frame = webView.bounds
+        operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+    }
+
+    /// `window.print()`: the page asks to be printed, as Safari would show
+    /// the print sheet. WKUIDelegate SPI; the frame is ignored, the whole
+    /// page prints.
+    @objc(_webView:printFrame:pdfFirstPageSize:completionHandler:)
+    func webView(_ webView: WKWebView, printFrame frame: NSObject?, pdfFirstPageSize: CGSize,
+                 completionHandler: @escaping () -> Void) {
+        printPage()
+        completionHandler()
+    }
+
+    @objc(_webView:printFrame:)
+    func webView(_ webView: WKWebView, printFrame frame: NSObject?) {
+        printPage()
     }
 
     /// The link under the pointer, as WebKit tells Safari for its status

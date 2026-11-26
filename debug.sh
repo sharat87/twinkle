@@ -10,6 +10,7 @@
 #   ./debug.sh press <keys>             key presses to wherever the focus is: text, {return},
 #                                       {escape}, {delete}, {tab}, {cmd-i}, {cmd-return}; `action` for ⇧ shortcuts
 #   ./debug.sh action <selector:>        run a menu command
+#   ./debug.sh menu "History/Recently Closed[/2]"   list a submenu's items, or click one (titles or 1-based numbers)
 #   ./debug.sh mouse <button>           click a mouse button mid-window (3 back, 4 forward)
 #   ./debug.sh mouse "left <x> <y>"     left-click at x, y points from the window's top left
 #   ./debug.sh mouse "move <x> <y>"     move the mouse there (link hovering), same points
@@ -41,6 +42,13 @@ if [[ "${1:-}" == "applescript" ]]; then
   "$tool" "dev.twinkle.debug.applescript$suffix" "$2"
   for _ in $(seq 1 40); do [[ -f "$dir/applescript.txt" ]] && break; sleep 0.25; done
   cat "$dir/applescript.txt"
+  exit 0
+fi
+if [[ "${1:-}" == "menu" ]]; then
+  rm -f "$dir/menu.txt"
+  "$tool" "dev.twinkle.debug.menu$suffix" "$2"
+  for _ in $(seq 1 20); do [[ -f "$dir/menu.txt" ]] && break; sleep 0.25; done
+  cat "$dir/menu.txt"
   exit 0
 fi
 if [[ "${1:-}" =~ ^(select|type|key|press|action|mouse|appearance)$ ]]; then

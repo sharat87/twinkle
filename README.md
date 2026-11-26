@@ -29,6 +29,9 @@ A minimal web browser for macOS, built on the system's WebKit. Vibed just for my
 - **The response status beside the address**, like `200 OK`, orange for 4xx and red for 5xx. A padlock (or a certificate or mixed-content warning) sits before it.
 - **The page's host in the window title** (`Title (example.com)`), so KeePassXC auto-type matches sites without a browser extension.
 - **Ad and tracker blocking** with EasyList and EasyPrivacy (or any EasyList/uBlock-syntax list, or hosts file), compiled into WebKit content blockers that run before requests are made.
+- **HTTPS first**: an `http:` address (typed, linked or redirected to) is tried over HTTPS, and loads over HTTP only if that fails or the site sends it back; such a site isn't tried again until the next launch. Local addresses (`localhost`, IPs, `.local`, single words) and ones with a port load as they are.
+- **No autoplay**: sound and video wait for a click.
+- **Recently closed tabs** under History, each coming back in its container with its back/forward list (a closed temporary container's tab gets a new temporary container).
 - **JSON responses pretty-printed** and highlighted, with exact numbers and key order (Raw shows the original).
 - **Address bar suggestions**: history and open tabs, fuzzy-matched like Sublime Text, with inline completion of addresses you've visited.
 
@@ -163,10 +166,10 @@ end tell
 
 | | |
 |---|---|
-| `⌘T` new tab (same container) · `⌃⌘0` new tab, no container · `⌃⌘1`–`9` new tab in container · `⌥⌘T` new temporary container | `⌘W` close · `⇧⌘T` reopen closed tab |
+| `⌘T` new tab (same container) · `⌃⌘0` new tab, no container · `⌃⌘1`–`9` new tab in container · `⌥⌘T` new temporary container | `⌘W` close · `⇧⌘T` reopen closed tab · `⌘P` print (or Save as PDF, from the print panel) |
 | `⌘L` address · `⌘F` find · `⌘G` / `⇧⌘G` next / previous | `⌘[` / `⌘]` back / forward · `⌘E` the tab's back/forward list (↑/↓ and Return, or click) · `⌘R` reload · `⌥⌘R` reload from origin |
 | `⌃Tab` recently used tabs (hold `⌃`, tap Tab to go further back, `⇧` reverses, Escape cancels) · `⇧⌘]` / `⇧⌘[` next / previous tab · `⌘1`–`⌘9` jump · `⇧⌘↑` / `⇧⌘↓` move tab up / down | `⌘+` (or `⌘=`) / `⌘-` / `⌘0` zoom, remembered per site · `⌃⌘S` tab list · `⇧⌘N` new container |
-| `⌥⇧⌘⌫` clear cookies and data for this site (Tools menu): everything the tab's container holds for the site, then a reload. For sign-ins that get stuck, like AWS. | |
+| `⌥⇧⌘⌫` clear cookies and data for this site (Tools menu): everything the tab's container holds for the site, then a reload. For sign-ins that get stuck, like AWS. | `⇧⌘C` copy the page's address · `⌥⇧⌘C` copy it as a Markdown link, `[title](address)` |
 
 Drag the blank space in the tab list (above, around or below the tabs) to move the window.
 

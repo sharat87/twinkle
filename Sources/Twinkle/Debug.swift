@@ -71,6 +71,39 @@ enum Debug {
                 _ = NSApp.sendAction(selector, to: target, from: nil)
             }
         }
+        // `./debug.sh menu "History/Recently Closed[/2]"`: a menu item by its
+        // titles (or 1-based numbers), opened as a click would (its delegate
+        // fills it). A submenu has its items' titles written to menu.txt
+        // (disabled ones in brackets); anything else is clicked.
+        DistributedNotificationCenter.default().addObserver(forName: name("menu"), object: nil, queue: .main) { note in
+            let path = (note.object as? String ?? "").split(separator: "/").map(String.init)
+            MainActor.assumeIsolated {
+                var menu = NSApp.mainMenu
+                var lines: [String] = []
+                for (i, part) in path.enumerated() {
+                    guard let current = menu else { lines = ["no menu at \(part)"]; break }
+                    current.delegate?.menuNeedsUpdate?(current)
+                    current.update()
+                    let index = Int(part).map { $0 - 1 } ?? current.indexOfItem(withTitle: part)
+                    guard current.items.indices.contains(index) else { lines = ["no item \(part)"]; break }
+                    let item = current.items[index]
+                    if let sub = item.submenu {
+                        menu = sub
+                        if i == path.count - 1 {
+                            sub.delegate?.menuNeedsUpdate?(sub)
+                            sub.update()
+                            lines = sub.items.map { $0.isSeparatorItem ? "—" : $0.isEnabled ? $0.title : "[\($0.title)]" }
+                        }
+                    } else {
+                        current.performActionForItem(at: index)
+                        lines = ["clicked \(item.title)"]
+                    }
+                }
+                let dir = AppState.shared.files.directory.appendingPathComponent("debug", isDirectory: true)
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try? (lines.joined(separator: "\n") + "\n").write(to: dir.appendingPathComponent("menu.txt"), atomically: true, encoding: .utf8)
+            }
+        }
         // `./debug.sh mouse <button>`: a click of that mouse button in the
         // middle of the window (3 is the back side button, 4 forward),
         // queued like a real one so event monitors see it.

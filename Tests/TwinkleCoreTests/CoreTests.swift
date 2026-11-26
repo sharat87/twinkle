@@ -42,6 +42,20 @@ let ddg = "https://duckduckgo.com/?q=%s"
         #expect(!Address.samePage(u("https://example.com/#x"), u("https://example.com/")))
         #expect(!Address.samePage(u("https://example.com/?a=1"), u("https://example.com/")))
     }
+
+    @Test func httpsUpgrade() {
+        let up = { (s: String) in Address.httpsUpgrade(URL(string: s)!)?.absoluteString }
+        #expect(up("http://example.com/a?b=1#c") == "https://example.com/a?b=1#c")
+        #expect(up("HTTP://Example.com") == "https://Example.com")
+        #expect(up("https://example.com/") == nil)
+        #expect(up("http://example.com:8080/") == nil)
+        #expect(up("http://localhost/") == nil)
+        #expect(up("http://192.168.1.1/") == nil)
+        #expect(up("http://[::1]/") == nil)
+        #expect(up("http://nas/") == nil)
+        #expect(up("http://printer.local/") == nil)
+        #expect(up("about:blank") == nil)
+    }
 }
 
 @Suite struct WindowTitleTests {
@@ -597,5 +611,16 @@ let ddg = "https://duckduckgo.com/?q=%s"
         #expect(!text.contains(#""plain" :"#))
         #expect(!text.contains(#""dict" :"#))
         #expect(try store.load(Payload.self, from: "test.json") == payload)
+    }
+}
+
+@Suite struct MarkdownTests {
+    @Test func link() {
+        let u = { (s: String) in URL(string: s)! }
+        #expect(Markdown.link(title: "Example Domain", url: u("https://example.com/")) == "[Example Domain](https://example.com/)")
+        #expect(Markdown.link(title: "a [b] \\c", url: u("https://example.com/")) == #"[a \[b\] \\c](https://example.com/)"#)
+        #expect(Markdown.link(title: "  ", url: u("https://example.com/x")) == "[example.com](https://example.com/x)")
+        #expect(Markdown.link(title: "Wiki", url: u("https://en.wikipedia.org/wiki/Swift_(language)"))
+                == "[Wiki](https://en.wikipedia.org/wiki/Swift_%28language%29)")
     }
 }
