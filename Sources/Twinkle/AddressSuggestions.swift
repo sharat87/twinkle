@@ -273,10 +273,11 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         guard rows.indices.contains(row), row != highlighted else { return }
         let old = highlighted
         highlighted = row
-        table.reloadData(forRowIndexes: IndexSet([old, row]), columnIndexes: IndexSet(integer: 0))
         table.scrollRowToVisible(row)
         for r in [old, row] {
-            (table.rowView(atRow: r, makeIfNecessary: false) as? SuggestionRowView)?.isOn = (r == highlighted)
+            let on = r == highlighted
+            (table.rowView(atRow: r, makeIfNecessary: false) as? SuggestionRowView)?.isOn = on
+            (table.view(atColumn: 0, row: r, makeIfNecessary: false) as? SuggestionCell)?.updateHighlight(on)
         }
         guard updateField else { return }
         let text = row == 0 ? fieldText : (rows[row].url.map { Self.display($0.absoluteString) } ?? fieldText)
@@ -455,6 +456,10 @@ final class SuggestionCell: NSTableCellView {
         self.detail.stringValue = detail
         self.detail.isHidden = detail.isEmpty
         self.icon.image = icon
+        updateHighlight(on)
+    }
+
+    func updateHighlight(_ on: Bool) {
         self.title.textColor = on ? .alternateSelectedControlTextColor : .labelColor
         self.detail.textColor = on ? .alternateSelectedControlTextColor.withAlphaComponent(0.8) : .secondaryLabelColor
         self.icon.contentTintColor = on ? .alternateSelectedControlTextColor : .secondaryLabelColor
