@@ -58,13 +58,13 @@ final class TabSwitcherPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
     /// edge, ends `gap` to its left, and grows down no further than it.
     func show(_ order: [Tab], position: Int, beside list: NSRect, gap: CGFloat, parent: NSWindow) {
         self.order = order
-        let bottomPadding: CGFloat = 6
-        let height = min(CGFloat(order.count) * table.rowHeight + bottomPadding, list.height)
+        table.reloadData()
+        // The source-list style pads above the first row, as in the tab list.
+        let content = table.rect(ofRow: order.count - 1).maxY + 6
+        let height = min(content, list.height)
         let frame = NSRect(x: list.minX - gap - list.width, y: list.maxY - height, width: list.width, height: height)
         panel.setFrame(frame, display: false)
-        scroll.frame = NSRect(x: 0, y: bottomPadding, width: frame.width, height: height - bottomPadding)
-
-        table.reloadData()
+        scroll.frame = NSRect(origin: .zero, size: frame.size)
         table.selectRowIndexes(IndexSet(integer: position), byExtendingSelection: false)
         table.scrollRowToVisible(position)
 

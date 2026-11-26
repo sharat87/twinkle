@@ -62,9 +62,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     /// which one ⌃Tab has got to.
     private var switcher: (order: [Tab], position: Int)?
     private let switcherPanel = TabSwitcherPanel()
-    /// Shows the switcher's list a moment after the first ⌃Tab, so a quick
-    /// tap back to the last tab doesn't flash it.
-    private var switcherPanelTimer: Timer?
 
     var current: Tab? { tabs.indices.contains(selected) ? tabs[selected] : nil }
 
@@ -1082,7 +1079,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     /// order they were used, marking the candidate in a list beside the tab
     /// list (and in the tab list); letting go of ⌃ shows it.
     private func stepSwitcher(backwards: Bool) {
-        let first = switcher == nil
         var state = switcher ?? (recentTabs(), 0)
         guard state.order.count > 1 else { return }
         let n = state.order.count
@@ -1094,18 +1090,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             table.scrollRowToVisible(i)
             syncingSelection = false
         }
-        if first {
-            switcherPanelTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
-                MainActor.assumeIsolated { self?.showSwitcherPanel() }
-            }
-        } else {
-            showSwitcherPanel()
-        }
+        showSwitcherPanel()
     }
 
     private func showSwitcherPanel() {
-        switcherPanelTimer?.invalidate()
-        switcherPanelTimer = nil
         guard let state = switcher, let window else { return }
         // Beside the tab list, lined up with it; where it would be when it's hidden.
         guard let list = table.enclosingScrollView else { return }
@@ -1120,8 +1108,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     private func finishSwitcher(commit: Bool) {
-        switcherPanelTimer?.invalidate()
-        switcherPanelTimer = nil
         switcherPanel.hide()
         guard let state = switcher else { return }
         switcher = nil
