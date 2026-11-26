@@ -8,10 +8,13 @@ public struct DomainSettings: Codable, Equatable, Sendable {
     public var zoom: Double?
     /// Whether the content blocker is off for this domain.
     public var adBlockingOff: Bool?
+    /// Name of the container that URLs with this domain open in.
+    public var container: String?
 
-    public init(zoom: Double? = nil, adBlockingOff: Bool? = nil) {
+    public init(zoom: Double? = nil, adBlockingOff: Bool? = nil, container: String? = nil) {
         self.zoom = zoom
         self.adBlockingOff = adBlockingOff
+        self.container = container
     }
 
     public var isEmpty: Bool { self == DomainSettings() }
@@ -19,7 +22,7 @@ public struct DomainSettings: Codable, Equatable, Sendable {
 
 /// settings.json's `domains`: settings per domain (and `"*"` as a wildcard
 /// fallback). An entry covers its subdomains, and for each setting the most
-/// specific entry that has it wins, like containers' `sites`.
+/// specific entry that has it wins.
 public struct Domains: Codable, Equatable, Sendable {
     public static let wildcard = "*"
 
@@ -36,11 +39,18 @@ public struct Domains: Codable, Equatable, Sendable {
         }.keys.max { $0.count < $1.count }
     }
 
-    public func value<T>(_ setting: KeyPath<DomainSettings, T?>, forHost host: String?) -> T? {
-        if let host, !host.isEmpty, let key = key(for: host, having: setting) {
-            return entries[key]?[keyPath: setting]
+    public func entry<T>(_ setting: KeyPath<DomainSettings, T?>, forHost host: String?) -> (value: T, key: String)? {
+        if let host, !host.isEmpty, let key = key(for: host, having: setting), let value = entries[key]?[keyPath: setting] {
+            return (value, key)
         }
-        return entries[Self.wildcard]?[keyPath: setting]
+        if let value = entries[Self.wildcard]?[keyPath: setting] {
+            return (value, Self.wildcard)
+        }
+        return nil
+    }
+
+    public func value<T>(_ setting: KeyPath<DomainSettings, T?>, forHost host: String?) -> T? {
+        entry(setting, forHost: host)?.value
     }
 
     private func inheritedValue<T>(_ setting: KeyPath<DomainSettings, T?>, forHost host: String, excluding excludedKey: String) -> T? {
@@ -90,6 +100,28 @@ public struct Domains: Codable, Equatable, Sendable {
         let target = key(for: host, having: \.adBlockingOff) ?? Hosts.siteKey(host)
         let fallback = inheritedValue(\.adBlockingOff, forHost: host, excluding: target) ?? false
         setEntry(\.adBlockingOff, off == fallback ? nil : off, on: target)
+        return target
+    }
+
+    /// The container assigned to `host` and the `domains` entry that matched it.
+    public func assignment(forHost host: String?, in containers: [Container]) -> (container: Container, site: String)? {
+        guard let (name, site) = entry(\.container, forHost: host), !name.isEmpty else { return nil }
+        let match = containers.first { $0.name == name }
+            ?? containers.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        return match.map { ($0, site) }
+    }
+
+    @discardableResult
+    public mutating func setContainer(_ name: String?, forHost host: String) -> String {
+        let target = Hosts.siteKey(host)
+        let fallback = inheritedValue(\.container, forHost: host, excluding: target)
+        let stored: String?
+        if let name, !name.isEmpty {
+            stored = fallback.map { $0.caseInsensitiveCompare(name) == .orderedSame } == true ? nil : name
+        } else {
+            stored = (fallback?.isEmpty == false) ? "" : nil
+        }
+        setEntry(\.container, stored, on: target)
         return target
     }
 

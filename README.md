@@ -61,7 +61,7 @@ Everything lives in Twinkle's sandbox container, in `~/Library/Containers/dev.tw
 
 | File | What |
 |---|---|
-| `settings.json` | Search engine, downloads folder, filter lists, your containers, and settings per domain (`zoom`, `adBlockingOff`). Missing keys take defaults. |
+| `settings.json` | Search engine, downloads folder, filter lists, your containers, and settings per domain (`zoom`, `adBlockingOff`, `container`). Missing keys take defaults. |
 | `session.json` | Open tabs, restored at launch. |
 | `filters/custom.txt` | Your own filter rules. |
 | `filters/cache/` | Downloaded filter lists. |
@@ -91,7 +91,7 @@ Downloads can only go to `~/Downloads` (or a folder in it): that's all the sandb
 }
 ```
 
-`domains` holds settings per domain (`zoom`, which ⌘+ and ⌘- remember, and `adBlockingOff`): `"domains": {"example.com": {"zoom": 1.25, "adBlockingOff": true}}`. An entry covers its subdomains, the most specific one winning. `"*"` sets defaults across all sites: `"*": {"adBlockingOff": true}` turns ad blocking off everywhere except sites with `"adBlockingOff": false`, and `"*": {"zoom": 1.1}` sets a default zoom level for all URLs.
+`domains` holds settings per domain (`zoom`, which ⌘+ and ⌘- remember, `adBlockingOff`, and `container` by container name): `"domains": {"example.com": {"zoom": 1.25, "adBlockingOff": true, "container": "Personal"}}`. An entry covers its subdomains, the most specific one winning. `"*"` sets defaults across all sites: `"*": {"adBlockingOff": true}` turns ad blocking off everywhere except sites with `"adBlockingOff": false`, and `"*": {"zoom": 1.1}` sets a default zoom level for all URLs.
 
 `unloadTabsAfterMinutes: 0` keeps every tab loaded. `historyDays: 0` keeps no history. `monospaceFont` and `monospaceFontSize` (CSS pixels) are what pages asking for `monospace` get, and what plain text and JSON are shown in; they apply to tabs opened after the change. The window title ends in ` (host)` so KeePassXC auto-type can match on it.
 
@@ -117,18 +117,23 @@ History is searched in memory (read from `history.sqlite` once), so typing never
 
 ### Containers
 
-They're the `containers` list in settings.json: `id` (keys the cookie jar; keep it), `name`, `color`, and `sites` that always open in it. Without the key there are no containers, and none of their data is deleted.
+They're the `containers` list in settings.json: `id` (keys the cookie jar; keep it), `name`, `color`, and optional `appleScriptEnabled` (defaults to `false`). Without the key there are no containers, and none of their data is deleted.
 
 ```json
 {
   "containers": [
-    { "id": "E00727EE-…", "name": "Personal", "color": "#3B82F6", "sites": ["example.com"] },
-    { "id": "8BB4415B-…", "name": "Work", "color": "#F97316", "sites": ["mail.example.com", "corp.io"] }
-  ]
+    { "id": "E00727EE-…", "name": "Personal", "color": "#3B82F6" },
+    { "id": "8BB4415B-…", "name": "Work", "color": "#F97316" }
+  ],
+  "domains": {
+    "example.com": { "container": "Personal" },
+    "mail.example.com": { "container": "Work" },
+    "corp.io": { "container": "Work" }
+  }
 }
 ```
 
-A site covers its subdomains, and the most specific entry wins: here `mail.example.com` opens in Work and the rest of `example.com` in Personal. Tools › Always Open This Site In sets it from the menu. A link or redirect to an assigned site moves to its container: a fresh tab is replaced, a tab with history keeps its page and the site opens beside it. Form posts, reloads, back/forward and pop-ups (sign-in windows talk to their opener) never move. Nor does a tab you put somewhere yourself with Reopen in Container, Duplicate, Reopen Closed Tab or a restored session.
+A `domains` entry covers its subdomains, and the most specific entry wins: here `mail.example.com` opens in Work and the rest of `example.com` in Personal. Tools › Always Open This Site In sets it from the menu. A link or redirect to an assigned site moves to its container: a fresh tab is replaced, a tab with history keeps its page and the site opens beside it. Form posts, reloads, back/forward and pop-ups (sign-in windows talk to their opener) never move. Nor does a tab you put somewhere yourself with Reopen in Container, Duplicate, Reopen Closed Tab or a restored session.
 
 ### AppleScript
 

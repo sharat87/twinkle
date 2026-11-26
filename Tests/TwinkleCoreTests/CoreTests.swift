@@ -209,33 +209,64 @@ let ddg = "https://duckduckgo.com/?q=%s"
 }
 
 @Suite struct ContainerSiteTests {
-    let personal = Container(name: "Personal", color: "#3B82F6", sites: ["example.com"])
-    let work = Container(name: "Work", color: "#F97316", sites: ["mail.example.com", "corp.io"])
-    var list: ContainerList { ContainerList(containers: [personal, work]) }
+    let personal = Container(name: "Personal", color: "#3B82F6")
+    let work = Container(name: "Work", color: "#F97316")
+    var containers: [Container] { [personal, work] }
 
     @Test func subdomainsAndMostSpecificWins() {
-        #expect(list.container(forHost: "example.com")?.name == "Personal")
-        #expect(list.container(forHost: "www.example.com")?.name == "Personal")
-        #expect(list.container(forHost: "mail.example.com")?.name == "Work")
-        #expect(list.container(forHost: "a.mail.example.com")?.name == "Work")
-        #expect(list.container(forHost: "WWW.CORP.IO.")?.name == "Work")
-        #expect(list.container(forHost: "notexample.com") == nil)
-        #expect(list.container(forHost: nil) == nil)
+        let domains = Domains([
+            "example.com": DomainSettings(container: "Personal"),
+            "mail.example.com": DomainSettings(container: "Work"),
+            "corp.io": DomainSettings(container: "work"),
+        ])
+        #expect(domains.assignment(forHost: "example.com", in: containers)?.container.name == "Personal")
+        #expect(domains.assignment(forHost: "www.example.com", in: containers)?.container.name == "Personal")
+        #expect(domains.assignment(forHost: "mail.example.com", in: containers)?.container.name == "Work")
+        #expect(domains.assignment(forHost: "a.mail.example.com", in: containers)?.container.name == "Work")
+        #expect(domains.assignment(forHost: "WWW.CORP.IO.", in: containers)?.container.name == "Work")
+        #expect(domains.assignment(forHost: "notexample.com", in: containers) == nil)
+        #expect(domains.assignment(forHost: nil, in: containers) == nil)
     }
 
-    @Test func assignMovesTheSite() {
-        var l = list
-        l.assign(host: "www.corp.io", to: personal.id)
-        #expect(l.containers[0].sites == ["example.com", "corp.io"])
-        #expect(l.containers[1].sites == ["mail.example.com"])
-        l.assign(host: "corp.io", to: nil)
-        #expect(l.container(forHost: "corp.io") == nil)
+    @Test func assignMovesTheSiteAndSupportsWildcard() {
+        var domains = Domains([
+            "example.com": DomainSettings(container: "Personal"),
+            "mail.example.com": DomainSettings(container: "Work"),
+            "corp.io": DomainSettings(container: "Work"),
+        ])
+        #expect(domains.setContainer("Personal", forHost: "www.corp.io") == "corp.io")
+        #expect(domains.entries["corp.io"]?.container == "Personal")
+        #expect(domains.assignment(forHost: "corp.io", in: containers)?.container.name == "Personal")
+
+        // Clearing removes the entry when there is no inherited default.
+        #expect(domains.setContainer(nil, forHost: "corp.io") == "corp.io")
+        #expect(domains.entries["corp.io"] == nil)
+        #expect(domains.assignment(forHost: "corp.io", in: containers) == nil)
+
+        // Assigning a subdomain preserves its parent's container, and clearing it overrides to none.
+        domains.setContainer("Work", forHost: "docs.example.com")
+        #expect(domains.assignment(forHost: "docs.example.com", in: containers)?.container.name == "Work")
+        #expect(domains.assignment(forHost: "example.com", in: containers)?.container.name == "Personal")
+        domains.setContainer(nil, forHost: "docs.example.com")
+        #expect(domains.entries["docs.example.com"]?.container == "")
+        #expect(domains.assignment(forHost: "docs.example.com", in: containers) == nil)
+        domains.setContainer("Personal", forHost: "docs.example.com")
+        #expect(domains.entries["docs.example.com"] == nil)
+
+        // Wildcard container default.
+        var withDefault = Domains(["*": DomainSettings(container: "Personal")])
+        #expect(withDefault.assignment(forHost: "any.example", in: containers)?.container.name == "Personal")
+        withDefault.setContainer(nil, forHost: "plain.example")
+        #expect(withDefault.assignment(forHost: "plain.example", in: containers) == nil)
+        withDefault.setContainer("Personal", forHost: "plain.example")
+        #expect(withDefault.entries["plain.example"] == nil)
     }
 
-    @Test func oldFilesWithoutSitesStillLoad() throws {
-        let json = ##"{"containers":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Old","color":"#22C55E"}]}"##
+    @Test func containerDefaultsAndIgnoresLegacySitesKey() throws {
+        let json = ##"{"containers":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Old","color":"#22C55E","sites":["example.com"]}]}"##
         let l = try JSONDecoder().decode(ContainerList.self, from: Data(json.utf8))
-        #expect(l.containers[0].sites == [])
+        #expect(l.containers[0].name == "Old")
+        #expect(!l.containers[0].appleScriptEnabled)
     }
 }
 

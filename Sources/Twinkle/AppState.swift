@@ -199,17 +199,18 @@ final class AppState {
         return containers.first { $0.id == id } ?? temporaries.first { $0.id == id }
     }
 
-    /// The container a site always opens in, from the containers' `sites`.
+    /// The container a site always opens in, from `domains`.
     func assignment(forHost host: String?) -> (container: Container, site: String)? {
-        ContainerList(containers: containers).assignment(forHost: host)
+        domains.assignment(forHost: host, in: containers)
     }
 
     /// Makes `host`'s site always open in `container` (nil: in whatever
     /// container the tab is in) and saves settings.json.
     func assign(host: String, to container: UUID?) {
-        var list = ContainerList(containers: containers)
-        list.assign(host: host, to: container)
-        saveContainers(list.containers)
+        let name = self.container(container)?.name
+        var changed = domains
+        changed.setContainer(name, forHost: host)
+        _ = save(domains: changed)
     }
 
     @discardableResult

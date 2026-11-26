@@ -55,7 +55,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// Opened by a page (window.open). Stays in its opener's container even
     /// on assigned sites, since sign-in pop-ups talk back to their opener.
     let isPopup: Bool
-    /// The `sites` entry this tab may stay on in its current container even
+    /// The `domains` entry this tab may stay on in its current container even
     /// though the site is assigned elsewhere: set when you put it here
     /// yourself (Reopen in Container, Duplicate, a restored session).
     var exemptSite: String?
