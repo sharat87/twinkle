@@ -61,7 +61,7 @@ Everything lives in Twinkle's sandbox container, in `~/Library/Containers/dev.tw
 
 | File | What |
 |---|---|
-| `settings.json` | Search engine, window title format, downloads folder, filter lists, sites with blocking off, your containers, and settings per domain (zoom). Missing keys take defaults. |
+| `settings.json` | Search engine, downloads folder, filter lists, your containers, and settings per domain (`zoom`, `adBlockingOff`). Missing keys take defaults. |
 | `session.json` | Open tabs, restored at launch. |
 | `filters/custom.txt` | Your own filter rules. |
 | `filters/cache/` | Downloaded filter lists. |
@@ -78,10 +78,7 @@ Downloads can only go to `~/Downloads` (or a folder in it): that's all the sandb
 ```json
 {
   "searchURL": "https://duckduckgo.com/?q=%s",
-  "windowTitleFormat": "{title} ({host})",
   "downloadsDirectory": "~/Downloads",
-  "adBlocking": true,
-  "adBlockingOffFor": ["example.com"],
   "filterLists": [
     "https://easylist.to/easylist/easylist.txt",
     "https://easylist.to/easylist/easyprivacy.txt"
@@ -94,7 +91,7 @@ Downloads can only go to `~/Downloads` (or a folder in it): that's all the sandb
 }
 ```
 
-`domains` holds settings per domain, so far only the zoom level ⌘+ and ⌘- remember: `"domains": {"example.com": {"zoom": 1.25}}`. An entry covers its subdomains, the most specific one winning.
+`domains` holds settings per domain (`zoom`, which ⌘+ and ⌘- remember, and `adBlockingOff`): `"domains": {"example.com": {"zoom": 1.25, "adBlockingOff": true}}`. An entry covers its subdomains, the most specific one winning. `"*"` sets defaults across all sites: `"*": {"adBlockingOff": true}` turns ad blocking off everywhere except sites with `"adBlockingOff": false`, and `"*": {"zoom": 1.1}` sets a default zoom level for all URLs.
 
 `unloadTabsAfterMinutes: 0` keeps every tab loaded. `historyDays: 0` keeps no history. `monospaceFont` and `monospaceFontSize` (CSS pixels) are what pages asking for `monospace` get, and what plain text and JSON are shown in; they apply to tabs opened after the change. The window title ends in ` (host)` so KeePassXC auto-type can match on it.
 
@@ -135,7 +132,7 @@ A site covers its subdomains, and the most specific entry wins: here `mail.examp
 
 ### AppleScript
 
-Any tab's address and title can be read, Chromium-style, which is what launchers like Alfred ask for:
+A window exposes `tabs` and `active tab`, with tab properties `id`, `URL`, `title`, `name` (alias of `title`), `container` (its name, or empty), and `loading`. Any tab's properties can be read, Chromium-style, which is what launchers like Alfred ask for:
 
 ```applescript
 tell application "Twinkle" to get {URL, title} of active tab of front window
@@ -153,7 +150,7 @@ tell application "Twinkle"
 end tell
 ```
 
-`new tab` opens in the background. `do JavaScript` runs in the page and returns text, numbers and booleans as they are, anything else as JSON text; pages' Content Security Policies don't apply. macOS asks once per app (Terminal, your agent) before it may script Twinkle.
+`new tab` opens in the background (requiring a full URL with scheme); pass `in container` an AppleScript-enabled container name (case-insensitive) or a script-created temporary container name (like `"Temporary 2"`, from `container of t`) to share its cookies. `do JavaScript` runs in the page and returns text, numbers and booleans as they are, anything else as JSON text; pages' Content Security Policies don't apply. macOS asks once per app (Terminal, your agent) before it may script Twinkle.
 
 ## Keys
 

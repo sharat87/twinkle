@@ -6,33 +6,54 @@ import Foundation
 public struct DomainSettings: Codable, Equatable, Sendable {
     /// Page zoom, 1 being 100%.
     public var zoom: Double?
+    /// Whether the content blocker is off for this domain.
+    public var adBlockingOff: Bool?
 
-    public init(zoom: Double? = nil) {
+    public init(zoom: Double? = nil, adBlockingOff: Bool? = nil) {
         self.zoom = zoom
+        self.adBlockingOff = adBlockingOff
     }
 
     public var isEmpty: Bool { self == DomainSettings() }
 }
 
-/// settings.json's `domains`: settings per domain. An entry covers its
-/// subdomains, and for each setting the most specific entry that has it wins,
-/// like containers' `sites`.
+/// settings.json's `domains`: settings per domain (and `"*"` as a wildcard
+/// fallback). An entry covers its subdomains, and for each setting the most
+/// specific entry that has it wins, like containers' `sites`.
 public struct Domains: Codable, Equatable, Sendable {
+    public static let wildcard = "*"
+
     public var entries: [String: DomainSettings]
 
     public init(_ entries: [String: DomainSettings] = [:]) {
         self.entries = entries
     }
 
-    /// The most specific entry covering `host` that has `setting`.
-    private func key<T>(for host: String, having setting: KeyPath<DomainSettings, T?>) -> String? {
-        entries.filter { Hosts.covers($0.key, host) && $0.value[keyPath: setting] != nil }
-            .keys.max { $0.count < $1.count }
+    /// The most specific domain entry covering `host` that has `setting`.
+    private func key<T>(for host: String, having setting: KeyPath<DomainSettings, T?>, excluding excludedKey: String? = nil) -> String? {
+        entries.filter {
+            $0.key != Self.wildcard && $0.key != excludedKey && Hosts.covers($0.key, host) && $0.value[keyPath: setting] != nil
+        }.keys.max { $0.count < $1.count }
     }
 
     public func value<T>(_ setting: KeyPath<DomainSettings, T?>, forHost host: String?) -> T? {
-        guard let host, !host.isEmpty, let key = key(for: host, having: setting) else { return nil }
-        return entries[key]?[keyPath: setting]
+        if let host, !host.isEmpty, let key = key(for: host, having: setting) {
+            return entries[key]?[keyPath: setting]
+        }
+        return entries[Self.wildcard]?[keyPath: setting]
+    }
+
+    private func inheritedValue<T>(_ setting: KeyPath<DomainSettings, T?>, forHost host: String, excluding excludedKey: String) -> T? {
+        if let key = key(for: host, having: setting, excluding: excludedKey) {
+            return entries[key]?[keyPath: setting]
+        }
+        return entries[Self.wildcard]?[keyPath: setting]
+    }
+
+    private mutating func setEntry<T>(_ setting: WritableKeyPath<DomainSettings, T?>, _ value: T?, on target: String) {
+        var entry = entries[target] ?? DomainSettings()
+        entry[keyPath: setting] = value
+        entries[target] = entry.isEmpty ? nil : entry
     }
 
     /// Sets `setting` for `host`'s site (nil removes it). The entry that
@@ -42,9 +63,7 @@ public struct Domains: Codable, Equatable, Sendable {
     @discardableResult
     public mutating func set<T>(_ setting: WritableKeyPath<DomainSettings, T?>, _ value: T?, forHost host: String) -> String {
         let target = key(for: host, having: setting) ?? Hosts.siteKey(host)
-        var entry = entries[target] ?? DomainSettings()
-        entry[keyPath: setting] = value
-        entries[target] = entry.isEmpty ? nil : entry
+        setEntry(setting, value, on: target)
         return target
     }
 
@@ -52,10 +71,26 @@ public struct Domains: Codable, Equatable, Sendable {
         value(\.zoom, forHost: host) ?? 1
     }
 
-    /// 100% is forgotten rather than stored.
+    /// Matches `inheritedValue` (or 1) is forgotten rather than stored.
     @discardableResult
     public mutating func setZoom(_ level: Double, forHost host: String) -> String {
-        set(\.zoom, abs(level - 1) < 0.001 ? nil : level, forHost: host)
+        let target = key(for: host, having: \.zoom) ?? Hosts.siteKey(host)
+        let fallback = inheritedValue(\.zoom, forHost: host, excluding: target) ?? 1
+        setEntry(\.zoom, abs(level - fallback) < 0.001 ? nil : level, on: target)
+        return target
+    }
+
+    /// Whether the blocker should run on pages from `host`.
+    public func blocks(on host: String?) -> Bool {
+        !(value(\.adBlockingOff, forHost: host) ?? false)
+    }
+
+    @discardableResult
+    public mutating func setAdBlockingOff(_ off: Bool, forHost host: String) -> String {
+        let target = key(for: host, having: \.adBlockingOff) ?? Hosts.siteKey(host)
+        let fallback = inheritedValue(\.adBlockingOff, forHost: host, excluding: target) ?? false
+        setEntry(\.adBlockingOff, off == fallback ? nil : off, on: target)
+        return target
     }
 
     // In the file it's the plain map.

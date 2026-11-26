@@ -275,6 +275,9 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         highlighted = row
         table.reloadData(forRowIndexes: IndexSet([old, row]), columnIndexes: IndexSet(integer: 0))
         table.scrollRowToVisible(row)
+        for r in [old, row] {
+            (table.rowView(atRow: r, makeIfNecessary: false) as? SuggestionRowView)?.isOn = (r == highlighted)
+        }
         guard updateField else { return }
         let text = row == 0 ? fieldText : (rows[row].url.map { Self.display($0.absoluteString) } ?? fieldText)
         field.stringValue = text
@@ -401,7 +404,9 @@ final class SuggestionTable: NSTableView {
 }
 
 final class SuggestionRowView: NSTableRowView {
-    var isOn = false
+    var isOn = false {
+        didSet { if isOn != oldValue { needsDisplay = true } }
+    }
 
     override func drawBackground(in dirtyRect: NSRect) {
         guard isOn else { return }

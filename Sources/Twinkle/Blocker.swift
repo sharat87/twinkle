@@ -83,7 +83,7 @@ final class Blocker {
 
     private func apply(to controller: WKUserContentController, force: Bool) {
         let host = hosts.object(forKey: controller) as String?
-        let on = AppState.shared.settings.blocks(on: host)
+        let on = AppState.shared.blocks(on: host)
         if !force, applied.object(forKey: controller)?.boolValue == on { return }
         controller.removeAllContentRuleLists()
         if on { lists.forEach(controller.add) }
@@ -103,7 +103,7 @@ final class Blocker {
                 await refresh(force: false)
             }
         } else {
-            applyEverywhere()
+            for controller in controllers.allObjects { apply(to: controller, force: false) }
         }
     }
 

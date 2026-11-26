@@ -521,8 +521,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         } else {
             progressBar.isHidden = true
         }
-        window?.title = WindowTitle.make(title: tab.pageTitle, url: tab.url,
-                                         format: AppState.shared.settings.windowTitleFormat)
+        window?.title = WindowTitle.make(title: tab.pageTitle, url: tab.url)
     }
 
     private func updateStatusBadge(for tab: Tab) {
@@ -1181,14 +1180,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     @objc func toggleBlockingForSite(_ sender: Any?) {
         guard let host = current?.url?.host()?.lowercased() else { return }
-        let settings = AppState.shared.settings
-        AppState.shared.updateSettings { s in
-            if settings.blocks(on: host) {
-                s.adBlockingOffFor.append(host)
-            } else {
-                s.adBlockingOffFor.removeAll { Hosts.covers($0, host) }
-            }
-        }
+        let currentlyBlocks = AppState.shared.blocks(on: host)
+        AppState.shared.setAdBlockingOff(currentlyBlocks, forHost: host)
         if let webView = current?.webView {
             Blocker.shared.tune(webView.configuration.userContentController, host: host)
             webView.reload()
@@ -1262,9 +1255,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             return host != nil
         case #selector(toggleBlockingForSite(_:)):
             let host = current?.url?.host()
-            let on = AppState.shared.settings.blocks(on: host)
+            let on = AppState.shared.blocks(on: host)
             item.title = on ? "Turn Off Ad Blocking for This Site" : "Turn On Ad Blocking for This Site"
-            return host != nil && AppState.shared.settings.adBlocking
+            return host != nil
         default: return true
         }
     }

@@ -45,50 +45,43 @@ let ddg = "https://duckduckgo.com/?q=%s"
 }
 
 @Suite struct WindowTitleTests {
-    let format = Settings().windowTitleFormat
-
     @Test func titleAndHost() {
-        let title = WindowTitle.make(title: "Sign in", url: URL(string: "https://accounts.example.com/login"), format: format)
+        let title = WindowTitle.make(title: "Sign in", url: URL(string: "https://accounts.example.com/login"))
         #expect(title == "Sign in (accounts.example.com)")
     }
 
     @Test func noPageTitleUsesHost() {
-        let title = WindowTitle.make(title: " ", url: URL(string: "https://example.com"), format: format)
+        let title = WindowTitle.make(title: " ", url: URL(string: "https://example.com"))
         #expect(title == "example.com (example.com)")
     }
 
     @Test func blankTab() {
-        #expect(WindowTitle.make(title: "", url: nil, format: format) == "Twinkle")
-    }
-
-    @Test func tokensInTitleAreNotExpanded() {
-        let title = WindowTitle.make(title: "{host}", url: URL(string: "https://a.com"), format: "{title} | {host} | {nope}")
-        #expect(title == "{host} | a.com | {nope}")
+        #expect(WindowTitle.make(title: "", url: nil) == "Twinkle")
+        #expect(WindowTitle.make(title: "  About  ", url: URL(string: "about:blank")) == "About")
     }
 }
 
 @Suite struct SettingsTests {
     @Test func partialFileKeepsDefaults() throws {
-        let s = try JSONDecoder().decode(Settings.self, from: Data(#"{"adBlocking": false}"#.utf8))
-        #expect(s.adBlocking == false)
+        let s = try JSONDecoder().decode(Settings.self, from: Data(#"{"historyDays": 30}"#.utf8))
+        #expect(s.historyDays == 30)
         #expect(s.searchURL == Settings().searchURL)
     }
 
-    @Test func blockingOffForSubdomains() {
-        var s = Settings()
-        s.adBlockingOffFor = ["example.com"]
-        #expect(!s.blocks(on: "www.example.com"))
-        #expect(!s.blocks(on: "example.com"))
-        #expect(s.blocks(on: "notexample.com"))
+    @Test func ignoresRemovedSettingsKeys() throws {
+        let json = #"{"windowTitleFormat": "{title}", "adBlocking": false, "adBlockingOffFor": ["example.com"], "historyDays": 90}"#
+        let s = try JSONDecoder().decode(Settings.self, from: Data(json.utf8))
+        #expect(s.historyDays == 90)
+        #expect(s.searchURL == Settings().searchURL)
     }
 
     @Test func containersLiveInTheSameFile() throws {
-        let json = ##"{"adBlocking": false, "containers": [{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Work"}]}"##
+        let json = ##"{"historyDays": 30, "containers": [{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Work"}]}"##
         let file = try JSONDecoder().decode(SettingsFile.self, from: Data(json.utf8))
-        #expect(file.settings.adBlocking == false)
+        #expect(file.settings.historyDays == 30)
         #expect(file.containers?.map(\.name) == ["Work"])
 
-        let missing = try JSONDecoder().decode(SettingsFile.self, from: Data(#"{"adBlocking": false}"#.utf8))
+        let missing = try JSONDecoder().decode(SettingsFile.self, from: Data(#"{"historyDays": 30}"#.utf8))
         #expect(missing.containers == nil)
 
         let again = try JSONDecoder().decode(SettingsFile.self, from: JSONEncoder().encode(file))
@@ -274,6 +267,52 @@ let ddg = "https://duckduckgo.com/?q=%s"
         #expect(file.domains.zoom(forHost: "a.com") == 0.8)
         let none = try JSONDecoder().decode(SettingsFile.self, from: Data("{}".utf8))
         #expect(none.domains.entries.isEmpty)
+    }
+
+    @Test func wildcardZoomDefaultAndOverride() {
+        var d = Domains([Domains.wildcard: DomainSettings(zoom: 1.25)])
+        #expect(d.zoom(forHost: nil) == 1.25)
+        #expect(d.zoom(forHost: "") == 1.25)
+        #expect(d.zoom(forHost: "example.com") == 1.25)
+
+        // Overriding "*" back to 1.0 stores an entry for the domain and leaves "*" intact.
+        #expect(d.setZoom(1.0, forHost: "www.example.com") == "example.com")
+        #expect(d.zoom(forHost: "example.com") == 1.0)
+        #expect(d.zoom(forHost: "sub.example.com") == 1.0)
+        #expect(d.zoom(forHost: "other.com") == 1.25)
+        #expect(d.entries["*"] == DomainSettings(zoom: 1.25))
+        #expect(d.entries["example.com"] == DomainSettings(zoom: 1.0))
+
+        // Setting back to the wildcard default removes the domain override.
+        #expect(d.setZoom(1.25, forHost: "sub.example.com") == "example.com")
+        #expect(d.entries == ["*": DomainSettings(zoom: 1.25)])
+    }
+
+    @Test func adBlockingPerDomainAndWildcard() {
+        var d = Domains()
+        #expect(d.blocks(on: nil))
+        #expect(d.blocks(on: "www.example.com"))
+        #expect(d.setAdBlockingOff(true, forHost: "www.example.com") == "example.com")
+        #expect(!d.blocks(on: "www.example.com"))
+        #expect(!d.blocks(on: "example.com"))
+        #expect(d.blocks(on: "notexample.com"))
+        #expect(d.setAdBlockingOff(false, forHost: "sub.example.com") == "example.com")
+        #expect(d.entries.isEmpty)
+
+        // Wildcard adBlockingOff: true with domain override false and toggling back.
+        d = Domains(["*": DomainSettings(adBlockingOff: true)])
+        #expect(!d.blocks(on: nil))
+        #expect(!d.blocks(on: "example.com"))
+        #expect(d.setAdBlockingOff(false, forHost: "www.example.com") == "example.com")
+        #expect(d.blocks(on: "www.example.com"))
+        #expect(d.blocks(on: "sub.example.com"))
+        #expect(!d.blocks(on: "other.com"))
+        #expect(d.entries["*"] == DomainSettings(adBlockingOff: true))
+        #expect(d.entries["example.com"] == DomainSettings(adBlockingOff: false))
+
+        #expect(d.setAdBlockingOff(true, forHost: "sub.example.com") == "example.com")
+        #expect(d.entries == ["*": DomainSettings(adBlockingOff: true)])
+        #expect(!d.blocks(on: "sub.example.com"))
     }
 }
 
@@ -485,5 +524,32 @@ let ddg = "https://duckduckgo.com/?q=%s"
         #expect(HTTPStatus.text(200) == "200 OK")
         #expect(HTTPStatus.text(404) == "404 Not Found")
         #expect(HTTPStatus.text(599) == "599")
+    }
+}
+
+@Suite struct FileStoreTests {
+    @Test func prettyPrintedJSONHasNoSpaceBeforeColonAndPreservesStrings() throws {
+        struct Payload: Codable, Equatable {
+            var plain: String
+            var escaped: String
+            var dict: [String: String]
+        }
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("twinkle-\(UUID())")
+        let store = try FileStore(directory: dir)
+        let payload = Payload(
+            plain: "hello : world",
+            escaped: #"foo" : bar and "a" : b"#,
+            dict: [#"key" : inside"#: #"val\" : ☕️"#]
+        )
+        try store.save(payload, to: "test.json")
+
+        let text = try String(contentsOf: store.url("test.json"), encoding: .utf8)
+        #expect(text.contains(#""plain": "hello : world""#))
+        #expect(text.contains(#""escaped": "foo\" : bar and \"a\" : b""#))
+        #expect(text.contains(#""key\" : inside": "val\\\" : ☕️""#))
+        #expect(!text.contains(#""plain" :"#))
+        #expect(!text.contains(#""dict" :"#))
+        #expect(try store.load(Payload.self, from: "test.json") == payload)
     }
 }

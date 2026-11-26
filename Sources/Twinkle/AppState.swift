@@ -129,8 +129,9 @@ final class AppState {
             return
         }
         settingsBroken = false
-        if loaded.settings != settings {
+        if loaded.settings != settings || loaded.domains != domains {
             settings = loaded.settings
+            domains = loaded.domains
             NotificationCenter.default.post(name: .settingsChanged, object: nil)
         }
         // A missing "containers" key reads as no containers, but doesn't
@@ -142,7 +143,6 @@ final class AppState {
             containers = list
             NotificationCenter.default.post(name: .containersChanged, object: nil)
         }
-        domains = loaded.domains
     }
 
     func updateSettings(_ change: (inout Settings) -> Void) {
@@ -415,6 +415,18 @@ final class AppState {
         var changed = domains
         changed.setZoom(level, forHost: host)
         _ = save(domains: changed)
+    }
+
+    func blocks(on host: String?) -> Bool {
+        domains.blocks(on: host)
+    }
+
+    func setAdBlockingOff(_ off: Bool, forHost host: String) {
+        var changed = domains
+        _ = changed.setAdBlockingOff(off, forHost: host)
+        if save(domains: changed) {
+            NotificationCenter.default.post(name: .settingsChanged, object: nil)
+        }
     }
 
     var downloadsDirectory: URL {

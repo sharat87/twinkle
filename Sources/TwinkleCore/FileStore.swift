@@ -29,9 +29,38 @@ public struct FileStore: Sendable {
     public func save<T: Encodable>(_ value: T, to name: String) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        var data = try encoder.encode(value)
+        var data = Self.compactColons(try encoder.encode(value))
         data.append(0x0A)
         try data.write(to: url(name), options: .atomic)
+    }
+
+    /// Strips the space before `:` that `JSONEncoder`'s `.prettyPrinted` adds
+    /// after object keys, without touching string literal contents.
+    static func compactColons(_ data: Data) -> Data {
+        var out = Data()
+        out.reserveCapacity(data.count)
+        var inString = false
+        var i = data.startIndex
+        while i < data.endIndex {
+            let byte = data[i]
+            let next = data.index(after: i)
+            if inString {
+                out.append(byte)
+                if byte == 0x5C, next < data.endIndex {
+                    out.append(data[next])
+                    i = data.index(after: next)
+                    continue
+                }
+                if byte == 0x22 { inString = false }
+            } else if byte == 0x20, out.last == 0x22, next < data.endIndex, data[next] == 0x3A {
+                // Drop the space in `"key" : value`.
+            } else {
+                out.append(byte)
+                if byte == 0x22 { inString = true }
+            }
+            i = next
+        }
+        return out
     }
 
     public func modificationDate(_ name: String) -> Date? {
