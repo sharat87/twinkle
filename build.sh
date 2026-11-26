@@ -64,6 +64,39 @@ bin="$(swift build -c "$config" --show-bin-path)/Twinkle"
 
 app="build/Twinkle.app"
 [[ -n "$unsafe" ]] && app="build/Twinkle Unsafe.app"
+stage="${app}.staging"
+rm -rf "$stage"
+trap 'rm -rf "$stage"' EXIT
+mkdir -p "$stage/Contents/MacOS" "$stage/Contents/Resources"
+cp "$bin" "$stage/Contents/MacOS/Twinkle"
+# SwiftPM's build system stamps the binary as built with the deployment
+# target's SDK (14.0) rather than the one it was built with. AppKit goes by
+# that stamp to pick its look, so menus and controls came out in the old
+# style (menus with a heavy dark outline). Stamp the real SDK version.
+vtool -set-build-version macos 14.0 "$(xcrun --show-sdk-version)" -replace \
+  -output "$stage/Contents/MacOS/Twinkle" "$stage/Contents/MacOS/Twinkle"
+cp Resources/Info.plist "$stage/Contents/Info.plist"
+cp Resources/Twinkle.sdef "$stage/Contents/Resources/Twinkle.sdef"
+# The icon is drawn by a script; redrawn only when the script changes.
+icon=.build/AppIcon.icns
+[[ -f "$icon" && "$icon" -nt scripts/make-icon.swift ]] || swift scripts/make-icon.swift "$icon"
+cp "$icon" "$stage/Contents/Resources/AppIcon.icns"
+if [[ -n "$unsafe" ]]; then
+  # Its own identifier (Integrity.unsafeBundleID), and none of the
+  # entitlements that reach outside its container: not the usual Twinkle's
+  # old data, nor Safari's. Only /tmp, for the profile.
+  plist="$stage/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier dev.twinkle.Twinkle.unsafe" \
+    -c "Set :CFBundleName Twinkle Unsafe" -c "Set :CFBundleDisplayName Twinkle Unsafe" "$plist"
+  entitlements=".build/Twinkle-unsafe.entitlements"
+  cp Resources/Twinkle.entitlements "$entitlements"
+  /usr/libexec/PlistBuddy -c "Delete :com.apple.security.temporary-exception.files.home-relative-path.read-only" \
+    -c "Delete :com.apple.security.temporary-exception.files.home-relative-path.read-write" "$entitlements"
+  codesign --force --options runtime --entitlements "$entitlements" --sign - "$stage" >/dev/null
+else
+  # Sandboxed, signed with the identity checked above.
+  codesign --force --options runtime --entitlements Resources/Twinkle.entitlements --sign "$identity" "$stage" >/dev/null
+fi
 if [[ -n "$run" ]]; then
   # Quit the running copy first (it saves its session) and wait for it to
   # go, or Launch Services may refuse to open the new one (error -600).
@@ -72,36 +105,7 @@ if [[ -n "$run" ]]; then
   for _ in $(seq 1 50); do [[ -z "$(instances)" ]] && break; sleep 0.1; done
 fi
 rm -rf "$app"
-mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-cp "$bin" "$app/Contents/MacOS/Twinkle"
-# SwiftPM's build system stamps the binary as built with the deployment
-# target's SDK (14.0) rather than the one it was built with. AppKit goes by
-# that stamp to pick its look, so menus and controls came out in the old
-# style (menus with a heavy dark outline). Stamp the real SDK version.
-vtool -set-build-version macos 14.0 "$(xcrun --show-sdk-version)" -replace \
-  -output "$app/Contents/MacOS/Twinkle" "$app/Contents/MacOS/Twinkle"
-cp Resources/Info.plist "$app/Contents/Info.plist"
-cp Resources/Twinkle.sdef "$app/Contents/Resources/Twinkle.sdef"
-# The icon is drawn by a script; redrawn only when the script changes.
-icon=.build/AppIcon.icns
-[[ -f "$icon" && "$icon" -nt scripts/make-icon.swift ]] || swift scripts/make-icon.swift "$icon"
-cp "$icon" "$app/Contents/Resources/AppIcon.icns"
-if [[ -n "$unsafe" ]]; then
-  # Its own identifier (Integrity.unsafeBundleID), and none of the
-  # entitlements that reach outside its container: not the usual Twinkle's
-  # old data, nor Safari's. Only /tmp, for the profile.
-  plist="$app/Contents/Info.plist"
-  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier dev.twinkle.Twinkle.unsafe" \
-    -c "Set :CFBundleName Twinkle Unsafe" -c "Set :CFBundleDisplayName Twinkle Unsafe" "$plist"
-  entitlements=".build/Twinkle-unsafe.entitlements"
-  cp Resources/Twinkle.entitlements "$entitlements"
-  /usr/libexec/PlistBuddy -c "Delete :com.apple.security.temporary-exception.files.home-relative-path.read-only" \
-    -c "Delete :com.apple.security.temporary-exception.files.home-relative-path.read-write" "$entitlements"
-  codesign --force --options runtime --entitlements "$entitlements" --sign - "$app" >/dev/null
-else
-  # Sandboxed, signed with the identity checked above.
-  codesign --force --options runtime --entitlements Resources/Twinkle.entitlements --sign "$identity" "$app" >/dev/null
-fi
+mv "$stage" "$app"
 echo "Built $app"
 
 if [[ -n "$run" ]]; then
