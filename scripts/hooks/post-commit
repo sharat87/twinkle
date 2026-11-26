@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Rebuilds build/Twinkle.app in the background after each commit, so
+# Twinkle › Restart Twinkle picks up the change. It doesn't touch the running
+# Twinkle. Output goes to build/post-commit.log.
+# Enable once per clone: git config core.hooksPath scripts/hooks
+cd "$(git rev-parse --show-toplevel)"
+# Not mid-rebase: only the last commit's build matters.
+[[ -d "$(git rev-parse --git-path rebase-merge)" || -d "$(git rev-parse --git-path rebase-apply)" ]] && exit 0
+mkdir -p build
+nohup ./build.sh release > build/post-commit.log 2>&1 &
