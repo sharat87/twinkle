@@ -7,6 +7,8 @@
 #   ./debug.sh type <text>              ⌘L, then type into the address field
 #   ./debug.sh key <down|up|enter|cmd-enter|tab|escape|delete>
 #   ./debug.sh key <ctrl-tab|ctrl-shift-tab|ctrl-up>   ⌃Tab switcher: step, let go of ⌃
+#   ./debug.sh press <keys>             key presses to wherever the focus is: text, {return},
+#                                       {escape}, {delete}, {tab}, {cmd-i}; `action` for ⇧ shortcuts
 #   ./debug.sh action <selector:>        run a menu command
 #   ./debug.sh mouse <button>           click a mouse button mid-window (3 back, 4 forward)
 #   ./debug.sh mouse "left <x> <y>"     left-click at x, y points from the window's top left
@@ -32,7 +34,7 @@ if [[ "${1:-}" == "open" ]]; then
   "$tool" "dev.twinkle.debug.open$suffix" "$2"$'\t'"${3:-}"
   exit 0
 fi
-if [[ "${1:-}" =~ ^(select|type|key|action|mouse|appearance)$ ]]; then
+if [[ "${1:-}" =~ ^(select|type|key|press|action|mouse|appearance)$ ]]; then
   "$tool" "dev.twinkle.debug.$1$suffix" "${2:-}"
   exit 0
 fi

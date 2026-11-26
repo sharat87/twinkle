@@ -565,6 +565,15 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         show(Dialogs.prompt(prompt, defaultText: defaultText, from: frame.securityOrigin.host, done: completionHandler))
     }
 
+    /// Follow Link: type a link's or field's text to click or focus it.
+    func showHints(newTab: Bool) {
+        guard let webView, dialogs.isEmpty, !webView.subviews.contains(where: { $0 is HintsOverlay }) else { return }
+        Hints.show(in: webView, newTab: newTab) { [weak self] url in
+            guard let self else { return }
+            self.host?.tab(self, open: url, inBackground: true)
+        }
+    }
+
     // MARK: Page dialogs
 
     /// The page's alerts and sign-ins waiting for an answer; the first is

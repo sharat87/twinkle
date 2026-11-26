@@ -1227,6 +1227,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         }
     }
 
+    @objc func followLink(_ sender: Any?) {
+        current?.showHints(newTab: false)
+    }
+
+    @objc func followLinkInNewTab(_ sender: Any?) {
+        current?.showHints(newTab: true)
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         let webView = current?.webView
         switch item.action {
@@ -1234,7 +1242,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         case #selector(goForward(_:)): return webView?.canGoForward ?? false
         case #selector(stopLoading(_:)): return webView?.isLoading ?? false
         case #selector(zoomIn(_:)), #selector(zoomOut(_:)), #selector(actualSize(_:)),
-             #selector(reloadFromOrigin(_:)), #selector(findNext(_:)), #selector(findPrevious(_:)), #selector(showFind(_:)):
+             #selector(reloadFromOrigin(_:)), #selector(findNext(_:)), #selector(findPrevious(_:)), #selector(showFind(_:)),
+             #selector(followLink(_:)), #selector(followLinkInNewTab(_:)):
             return webView != nil
         case #selector(copyAddress(_:)): return current?.url != nil
         case #selector(clearSiteData(_:)):

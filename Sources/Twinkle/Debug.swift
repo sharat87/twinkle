@@ -100,6 +100,43 @@ enum Debug {
                 }
             }
         }
+        // `./debug.sh press <keys>`: real key presses queued to the window,
+        // so they go wherever its keyboard focus is. Plain characters, plus
+        // {return}, {escape}, {delete}, {tab}, and {cmd-x}. (Shifted menu
+        // shortcuts don't match posted events; use `action` for those.)
+        DistributedNotificationCenter.default().addObserver(forName: name("press"), object: nil, queue: .main) { note in
+            let keys = note.object as? String ?? ""
+            MainActor.assumeIsolated {
+                guard let window = controller()?.window else { return }
+                let named: [String: (String, UInt16)] = ["return": ("\r", 36), "escape": ("\u{1b}", 53),
+                                                         "delete": ("\u{7f}", 51), "tab": ("\t", 48)]
+                var presses: [(String, UInt16, NSEvent.ModifierFlags)] = []
+                var rest = Substring(keys)
+                while let c = rest.first {
+                    if c == "{", let end = rest.firstIndex(of: "}") {
+                        var name = rest[rest.index(after: rest.startIndex)..<end]
+                        var flags: NSEvent.ModifierFlags = []
+                        if name.hasPrefix("cmd-") { flags.insert(.command); name = name.dropFirst(4) }
+                        if let (chars, code) = named[String(name)] { presses.append((chars, code, flags)) }
+                        else { presses.append((String(name), 0, flags)) }
+                        rest = rest[rest.index(after: end)...]
+                    } else {
+                        presses.append((String(c), 0, []))
+                        rest = rest.dropFirst()
+                    }
+                }
+                for (chars, code, flags) in presses {
+                    for type in [NSEvent.EventType.keyDown, .keyUp] {
+                        if let event = NSEvent.keyEvent(
+                            with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+                            windowNumber: window.windowNumber, context: nil, characters: chars,
+                            charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code) {
+                            NSApp.postEvent(event, atStart: false)
+                        }
+                    }
+                }
+            }
+        }
         // `./debug.sh appearance <light|dark|system>`: for screenshots of
         // both, without changing the Mac's own setting.
         DistributedNotificationCenter.default().addObserver(forName: name("appearance"), object: nil, queue: .main) { note in
