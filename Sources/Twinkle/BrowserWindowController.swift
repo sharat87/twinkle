@@ -1391,8 +1391,8 @@ final class TabCell: NSTableCellView {
         }
         NSLayoutConstraint.activate([
             // `.sourceList` insets the cell by 16pt from the row view's left edge,
-            // placing the favicon 8pt inside the selection pill (x = 15 in row coords).
-            favicon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 7),
+            // placing the favicon 8pt inside the selection pill (x = 17 in row coords).
+            favicon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 9),
             favicon.centerYAnchor.constraint(equalTo: centerYAnchor),
             favicon.widthAnchor.constraint(equalToConstant: 18),
             favicon.heightAnchor.constraint(equalToConstant: 18),
@@ -1520,7 +1520,7 @@ final class TabRowView: NSTableRowView {
         let bottomInset: CGFloat = continuesBelow ? 0 : 6
         let minYInset = isFlipped ? topInset : bottomInset
         let maxYInset = isFlipped ? bottomInset : topInset
-        let rect = NSRect(x: 4, y: minYInset, width: 4, height: bounds.height - minYInset - maxYInset)
+        let rect = NSRect(x: 3, y: minYInset, width: 4, height: bounds.height - minYInset - maxYInset)
         guard rect.height > 0 else { return }
 
         let roundMinY = isFlipped ? !continuesAbove : !continuesBelow
@@ -1563,7 +1563,7 @@ final class TabRowView: NSTableRowView {
 
     override func drawSelection(in dirtyRect: NSRect) {
         guard selectionHighlightStyle != .none else { return }
-        let rect = NSRect(x: 15, y: 1, width: bounds.width - 25, height: bounds.height - 2)
+        let rect = NSRect(x: 17, y: 1, width: bounds.width - 27, height: bounds.height - 2)
         guard rect.width > 0, rect.height > 0 else { return }
         NSColor.selectedContentBackgroundColor.setFill()
         NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
