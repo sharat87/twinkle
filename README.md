@@ -18,7 +18,7 @@ A minimal web browser for macOS, built on the system's WebKit. Vibed just for my
 
 ## What's there
 
-- **Tabs down the right**, one address field, the page. No start page, no accounts. A speaker marks tabs playing sound; ⌃Tab goes back through tabs in the order you used them.
+- **Tabs down the right**, one address field, the page. No start page, no accounts. A speaker marks tabs playing sound; ⌃Tab goes back through tabs in the order you used them, listed beside the tab list while ⌃ is held.
 - **Containers**, like Firefox's Multi-Account Containers: tabs in one window, each container with its own cookies, storage and cache. Sites can be assigned to a container so they always open there.
 - **Temporary containers**: a throwaway cookie jar, kept only in memory and gone when its last tab closes.
 - **Idle tabs unload** after 30 minutes in the background, freeing their memory, and come back with their history when clicked. Tabs playing sound or holding a half-filled form are left alone.

@@ -59,6 +59,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     /// While ⌃ is held after ⌃Tab: the tabs, most recently used first, and
     /// which one ⌃Tab has got to.
     private var switcher: (order: [Tab], position: Int)?
+    private let switcherPanel = TabSwitcherPanel()
+    /// Shows the switcher's list a moment after the first ⌃Tab, so a quick
+    /// tap back to the last tab doesn't flash it.
+    private var switcherPanelTimer: Timer?
 
     var current: Tab? { tabs.indices.contains(selected) ? tabs[selected] : nil }
 
@@ -1073,31 +1077,60 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     /// ⌃Tab (⌃⇧Tab backwards) while ⌃ is held steps through the tabs in the
-    /// order they were used, marking the candidate in the tab list; letting
-    /// go of ⌃ shows it. With the tab list hidden, each step shows its tab.
+    /// order they were used, marking the candidate in a list beside the tab
+    /// list (and in the tab list); letting go of ⌃ shows it.
     private func stepSwitcher(backwards: Bool) {
+        let first = switcher == nil
         var state = switcher ?? (recentTabs(), 0)
         guard state.order.count > 1 else { return }
         let n = state.order.count
         state.position = (state.position + (backwards ? n - 1 : 1)) % n
         switcher = state
-        guard let i = index(of: state.order[state.position]) else { return }
-        if tabListItem.isCollapsed {
-            select(i)
-        } else {
+        if let i = index(of: state.order[state.position]) {
             syncingSelection = true
             table.selectRowIndexes(IndexSet(integer: i), byExtendingSelection: false)
             table.scrollRowToVisible(i)
             syncingSelection = false
         }
+        if first {
+            switcherPanelTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated { self?.showSwitcherPanel() }
+            }
+        } else {
+            showSwitcherPanel()
+        }
+    }
+
+    private func showSwitcherPanel() {
+        switcherPanelTimer?.invalidate()
+        switcherPanelTimer = nil
+        guard let state = switcher, let window else { return }
+        // Beside the tab list, or at the window's edge when it's hidden.
+        let anchor = tabListItem.isCollapsed ? pageArea : tabListItem.viewController.view
+        let frame = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+        let right = tabListItem.isCollapsed ? frame.maxX - 12 : frame.minX - 8
+        switcherPanel.show(state.order, position: state.position, right: right, midY: frame.midY, parent: window)
     }
 
     private func finishSwitcher(commit: Bool) {
+        switcherPanelTimer?.invalidate()
+        switcherPanelTimer = nil
+        switcherPanel.hide()
         guard let state = switcher else { return }
         switcher = nil
         let start = state.order.first.flatMap(index(of:))
         let chosen = commit ? index(of: state.order[state.position]) : start
         if let chosen { select(chosen) } else { syncTableSelection() }
+    }
+
+    func debugSwitcherView() -> NSView? { switcherPanel.isVisible ? switcherPanel.contentView : nil }
+
+    /// The switcher's frame and the tab list's, in the window, while it's up.
+    func debugSwitcherFrame() -> [String: String] {
+        guard let panel = switcherPanel.contentView?.window, panel.parent != nil, let window else { return [:] }
+        let list = tabListItem.viewController.view
+        return ["panel": NSStringFromRect(window.convertFromScreen(panel.frame)),
+                "tabList": NSStringFromRect(list.convert(list.bounds, to: nil))]
     }
 
     @objc func moveTabUp(_ sender: Any?) {
@@ -1410,7 +1443,7 @@ final class TabCell: NSTableCellView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    private static let placeholder: NSImage? = {
+    static let placeholder: NSImage? = {
         let image = NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
         return image?.withSymbolConfiguration(.init(paletteColors: [.tertiaryLabelColor]))
     }()

@@ -115,6 +115,13 @@ enum Debug {
             try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("suggestions.png"))
         }
 
+        let switcherFile = dir.appendingPathComponent("switcher.png")
+        try? FileManager.default.removeItem(at: switcherFile)
+        if let panel = controller.debugSwitcherView(), let rep = panel.bitmapImageRepForCachingDisplay(in: panel.bounds) {
+            panel.cacheDisplay(in: panel.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: switcherFile)
+        }
+
         if let frame = controller.window?.contentView?.superview,
            let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) {
             frame.cacheDisplay(in: frame.bounds, to: rep)
@@ -168,6 +175,7 @@ extension BrowserWindowController {
         [
             "windowTitle": window?.title ?? "",
             "selected": tabs.firstIndex { $0 === current } ?? -1,
+            "switcher": debugSwitcherFrame(),
             "pageFrame": NSStringFromRect(current?.webView?.frame ?? .zero),
             "addressFieldInWindow": addressFieldVisible,
             "firstResponder": window?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil",

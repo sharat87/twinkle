@@ -10,7 +10,7 @@
 #   ./debug.sh action <selector:>        run a menu command
 #   ./debug.sh mouse <button>           click a mouse button mid-window (3 back, 4 forward)
 #   ./debug.sh appearance <light|dark|system>   for screenshots of both
-# Writes state.json, window.png, page.png to Twinkle's folder in its sandbox
+# Writes state.json, window.png, page.png (switcher.png while the ⌃Tab list is up) to Twinkle's folder in its sandbox
 # container (~/Library/Containers/dev.twinkle.Twinkle/…/Twinkle/debug/).
 # TWINKLE_PROFILE=<folder> ./debug.sh … drives the Twinkle started with
 # `./build.sh release run --profile <folder>` instead, and its files are in <folder>/debug/.
