@@ -411,8 +411,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         scheduleSave()
         if tab.isBlank {
             focusAddress(nil)
-        } else if changed, let webView = tab.webView {
-            window?.makeFirstResponder(webView)
+        } else if changed, let responder = tab.pageResponder {
+            window?.makeFirstResponder(responder)
         }
     }
 
@@ -566,10 +566,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     func tabWantsClose(_ tab: Tab) {
         if let i = index(of: tab) { closeTab(at: i) }
-    }
-
-    func reveal(_ tab: Tab) {
-        if let i = index(of: tab), i != selected { select(i) }
     }
 
     /// A fresh tab is replaced by one in the right container; a tab with a
@@ -773,14 +769,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             } else if let tab = current {
                 tab.load(url)
                 select(selected)
-                window?.makeFirstResponder(tab.webView)
+                window?.makeFirstResponder(tab.pageResponder)
             }
             updateChrome()
         }
         s.switchTo = { [unowned self] tab in
             addressField.stringValue = tab.url?.absoluteString ?? ""
             if let i = index(of: tab) { select(i) }
-            window?.makeFirstResponder(current?.webView)
+            window?.makeFirstResponder(current?.pageResponder)
             updateChrome()
         }
         return s
@@ -858,7 +854,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         if let tab = current {
             tab.load(url)
             select(selected)
-            window?.makeFirstResponder(tab.webView)
+            window?.makeFirstResponder(tab.pageResponder)
         } else {
             openTab(url: url, container: nil)
         }
@@ -870,7 +866,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         if selector == #selector(NSResponder.cancelOperation(_:)) {
             if control === addressField {
                 addressField.stringValue = current?.url?.absoluteString ?? ""
-                if let webView = current?.webView { window?.makeFirstResponder(webView) }
+                if let responder = current?.pageResponder { window?.makeFirstResponder(responder) }
                 updateChrome()
                 return true
             }
@@ -900,7 +896,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         findBar.isHidden = true
         findBarHeight.constant = 0
         findResult.stringValue = ""
-        if let webView = current?.webView { window?.makeFirstResponder(webView) }
+        if let responder = current?.pageResponder { window?.makeFirstResponder(responder) }
     }
 
     @objc private func findFieldEntered(_ sender: NSSearchField) {

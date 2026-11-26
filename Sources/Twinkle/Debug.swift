@@ -207,6 +207,7 @@ extension BrowserWindowController {
                     "hasIcon": tab.icon != nil,
                     "exemptSite": tab.exemptSite ?? "",
                     "unloadCheck": tab.unloadCheck,
+                    "dialog": tab.dialogTitle ?? "",
                     "zoom": tab.webView?.pageZoom ?? 0,
                     "container": AppState.shared.container(tab.containerID)?.name ?? "",
                 ]

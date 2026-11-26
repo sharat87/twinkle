@@ -10,7 +10,6 @@ protocol TabHost: AnyObject {
     func tab(_ tab: Tab, open url: URL, inBackground: Bool)
     func tab(_ tab: Tab, popupWith configuration: WKWebViewConfiguration) -> WKWebView?
     func tabWantsClose(_ tab: Tab)
-    func reveal(_ tab: Tab)
     /// The tab tried to go to a site that always opens in another container.
     func tab(_ tab: Tab, open url: URL, inAssigned container: UUID)
 }
@@ -162,7 +161,7 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// Whether the tab may be unloaded: not loading, not playing or
     /// recording anything, and no half-filled form on the page.
     func canUnload(_ done: @escaping (Bool) -> Void) {
-        guard let webView, !isPopup, !webView.isLoading, webView.url != nil,
+        guard let webView, !isPopup, !webView.isLoading, webView.url != nil, dialogs.isEmpty,
               webView.cameraCaptureState == .none, webView.microphoneCaptureState == .none else {
             unloadCheck = "busy"
             done(false)
@@ -256,6 +255,9 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func close() {
+        let open = dialogs
+        dialogs = []
+        open.forEach { $0.dismiss() }
         observations = []
         statusByItem = [:]
         audioObservation = nil
@@ -528,14 +530,13 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
             completionHandler(.performDefaultHandling, nil)
             return
         }
-        host?.reveal(self)
-        Dialogs.credentials(host: challenge.protectionSpace.host, realm: challenge.protectionSpace.realm, in: host?.window) { creds in
+        show(Dialogs.credentials(host: challenge.protectionSpace.host, realm: challenge.protectionSpace.realm) { creds in
             if let creds {
                 completionHandler(.useCredential, URLCredential(user: creds.user, password: creds.password, persistence: .forSession))
             } else {
                 completionHandler(.cancelAuthenticationChallenge, nil)
             }
-        }
+        })
     }
 
     // MARK: UI
@@ -551,20 +552,62 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
                  initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
-        host?.reveal(self)
-        Dialogs.alert(message, from: frame.securityOrigin.host, in: host?.window, done: completionHandler)
+        show(Dialogs.alert(message, from: frame.securityOrigin.host, done: completionHandler))
     }
 
     func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
                  initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
-        host?.reveal(self)
-        Dialogs.confirm(message, from: frame.securityOrigin.host, in: host?.window, done: completionHandler)
+        show(Dialogs.confirm(message, from: frame.securityOrigin.host, done: completionHandler))
     }
 
     func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,
                  initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
-        host?.reveal(self)
-        Dialogs.prompt(prompt, defaultText: defaultText, from: frame.securityOrigin.host, in: host?.window, done: completionHandler)
+        show(Dialogs.prompt(prompt, defaultText: defaultText, from: frame.securityOrigin.host, done: completionHandler))
+    }
+
+    // MARK: Page dialogs
+
+    /// The page's alerts and sign-ins waiting for an answer; the first is
+    /// on screen, over this tab's page only.
+    private var dialogs: [PageDialog] = []
+    var dialogTitle: String? { dialogs.first?.title }
+
+    /// What should have the keyboard when this tab is in front.
+    var pageResponder: NSView? {
+        guard let dialog = dialogs.first else { return webView }
+        return dialog.focus ?? dialog
+    }
+
+    private func show(_ dialog: PageDialog) {
+        dialog.onFinish = { [weak self, weak dialog] in
+            guard let self, let dialog else { return }
+            self.dialogFinished(dialog)
+        }
+        dialogs.append(dialog)
+        if dialogs.count == 1 { attach(dialog) }
+        host?.tabDidChange(self)
+    }
+
+    private func attach(_ dialog: PageDialog) {
+        guard let webView else { return dialog.dismiss() }
+        dialog.frame = webView.bounds
+        dialog.autoresizingMask = [.width, .height]
+        webView.addSubview(dialog)
+        // In the window only while the tab is in front.
+        webView.window?.makeFirstResponder(dialog.focus ?? dialog)
+    }
+
+    private func dialogFinished(_ dialog: PageDialog) {
+        let window = dialog.window
+        let hadFocus = (window?.firstResponder as? NSView)?.isDescendant(of: dialog) ?? false
+        dialog.removeFromSuperview()
+        dialogs.removeAll { $0 === dialog }
+        if let next = dialogs.first, next.superview == nil {
+            attach(next)
+        } else if hadFocus, let webView {
+            window?.makeFirstResponder(webView)
+        }
+        host?.tabDidChange(self)
     }
 
     func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
