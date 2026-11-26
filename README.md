@@ -14,7 +14,7 @@ A minimal web browser for macOS, built on the system's WebKit. Vibed just for my
 - **Shortcuts are changed in macOS**, under System Settings › Keyboard › Keyboard Shortcuts › App Shortcuts, as for any menu item.
 - **No dev tools of its own.** Inspect Element opens Safari's Web Inspector.
 - **No MCP.** Ask your agent to write AppleScript (see below); it only gets the containers you let it have.
-- **Permissions are always denied.** Camera, microphone and screen capture are refused without asking. Location and web notifications aren't implemented at all.
+- **Permissions are always denied.** Camera, microphone and screen capture are refused without asking. Location and web notifications aren't implemented at all. The one exception: a page that tries to open an app (Slack after you sign in, a Zoom link) asks first, naming the app and the container, so you choose which sign-in hands off to it. Links you click open their app without asking.
 
 <img alt="Twinkle's Tools menu open over a GitHub page: every action is a menu item, and the address field is in Monaco so look-alike letters stand apart" src="docs/screenshot-menus.png" width="751">
 
