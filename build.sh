@@ -74,6 +74,12 @@ fi
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/Twinkle"
+# SwiftPM's build system stamps the binary as built with the deployment
+# target's SDK (14.0) rather than the one it was built with. AppKit goes by
+# that stamp to pick its look, so menus and controls came out in the old
+# style (menus with a heavy dark outline). Stamp the real SDK version.
+vtool -set-build-version macos 14.0 "$(xcrun --show-sdk-version)" -replace \
+  -output "$app/Contents/MacOS/Twinkle" "$app/Contents/MacOS/Twinkle"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 # The icon is drawn by a script; redrawn only when the script changes.
 icon=.build/AppIcon.icns
