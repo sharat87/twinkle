@@ -2,7 +2,8 @@ import AppKit
 import WebKit
 
 /// Follow Link (⌘I): type the text of a link, button or field on screen,
-/// then Return to click or focus it, or ⌘Return to open a link in a new tab.
+/// then Tab or Shift-Tab to cycle matching targets and Return to click or
+/// focus it, or ⌘Return to open a link in a new tab.
 /// Ones with no text of their own get a two-letter label instead, picked so
 /// it isn't in any of the text: typing it can only mean that one.
 ///
@@ -145,6 +146,8 @@ final class HintsOverlay: NSView {
     private let targets: [Hints.Target]
     private var choose: ((Hints.Target, _ newTab: Bool) -> Void)?
     private var query = ""
+    /// Index into `matches` pinned by Tab/Shift-Tab; nil means use automatic best.
+    private var tabIndex: Int?
     private let pill = NSTextField(labelWithString: "")
     private let pillBox = NSView()
 
@@ -184,23 +187,43 @@ final class HintsOverlay: NSView {
         return targets.filter { $0.label.isEmpty ? $0.text.contains(query) : $0.label.hasPrefix(query) }
     }
 
-    /// Return's pick: the only match, else the text that is exactly what you
-    /// typed, else the shortest (the most specific), else the first.
+    /// Return's pick: the Tab-pinned match (if set), else the only match,
+    /// else the text that is exactly what you typed, else the shortest
+    /// (the most specific), else the first.
     private var best: Hints.Target? {
         let m = matches
+        if let ti = tabIndex, ti < m.count { return m[ti] }
         if m.count == 1 { return m[0] }
         guard !query.isEmpty else { return nil }
         return m.first { $0.text == query } ?? m.filter { !$0.text.isEmpty }.min { $0.text.count < $1.text.count } ?? m.first
     }
 
     private func update() {
+        tabIndex = nil
         let count = matches.count
         if query.isEmpty {
             pill.stringValue = "Type a link's or field's text, or its label"
         } else {
             pill.stringValue = count == 0 ? "\(query) — nothing matches"
-                : "\(query) — \(count == 1 ? "1 match" : "\(count) matches"): Return to click the highlighted one, ⌘Return for a new tab"
+                : "\(query) — \(count == 1 ? "1 match" : "\(count) matches"): Return to click the highlighted one, Tab to cycle, ⌘Return for a new tab"
         }
+        needsDisplay = true
+    }
+
+    private func cyclePick(forward: Bool) {
+        let m = matches
+        guard m.count > 1 else { return NSSound.beep() }
+        let next: Int
+        if let current = tabIndex ?? best.flatMap({ b in m.firstIndex { $0.index == b.index } }) {
+            next = forward ? (current + 1) % m.count : (current - 1 + m.count) % m.count
+        } else {
+            next = forward ? 0 : m.count - 1
+        }
+        tabIndex = next
+        let total = m.count
+        let pos = next + 1
+        let prefix = query.isEmpty ? "" : "\(query) — "
+        pill.stringValue = "\(prefix)\(pos) of \(total): Return to click the highlighted one, Tab to cycle, ⌘Return for a new tab"
         needsDisplay = true
     }
 
@@ -252,6 +275,9 @@ final class HintsOverlay: NSView {
         case 53: return finish(nil)                       // Escape
         case 36, 76:                                      // Return, Enter
             if let best { finish(best, newTab: event.modifierFlags.contains(.command)) } else { NSSound.beep() }
+            return
+        case 48:                                          // Tab
+            cyclePick(forward: !event.modifierFlags.contains(.shift))
             return
         case 51:                                          // Delete
             if !query.isEmpty { query.removeLast() }
