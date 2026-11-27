@@ -25,7 +25,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
 
     var open: (URL, _ newTab: Bool) -> Void = { _, _ in }
     var switchTo: (Tab) -> Void = { _ in }
-    var goTo: (WKBackForwardListItem) -> Void = { _ in }
+    var goTo: (WKBackForwardListItem, _ newTab: Bool) -> Void = { _, _ in }
     var tabs: () -> [Tab] = { [] }
     var current: () -> Tab? = { nil }
 
@@ -327,8 +327,8 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         switch row.kind {
         case .tab(let tab) where !newTab:
             switchTo(tab)
-        case .history(let item) where !newTab:
-            goTo(item)
+        case .history(let item):
+            goTo(item, newTab)
         case .typed where row.url == nil:
             if let url = Address.resolve(fieldText, searchTemplate: AppState.shared.settings.searchURL) { open(url, newTab) }
         default:

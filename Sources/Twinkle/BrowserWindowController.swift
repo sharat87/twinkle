@@ -845,11 +845,26 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             }
             updateChrome()
         }
-        s.goTo = { [unowned self] item in
+        s.goTo = { [unowned self] item, newTab in
             guard let tab = current, let webView = tab.webView else { return }
-            addressField.stringValue = item.url.absoluteString
-            webView.go(to: item)
-            window?.makeFirstResponder(tab.pageResponder)
+            if newTab {
+                let list = webView.backForwardList
+                let all = list.backList + (list.currentItem.map { [$0] } ?? []) + list.forwardList
+                let index = all.firstIndex(of: item)
+                let new = openTab(url: item.url, container: tab.containerID, at: selected + 1,
+                                  title: item.title ?? "", exempt: true, history: tab.history)
+                if let index, let newWebView = new.webView {
+                    let newList = newWebView.backForwardList
+                    let newAll = newList.backList + (newList.currentItem.map { [$0] } ?? []) + newList.forwardList
+                    if newAll.indices.contains(index), newAll[index] != newList.currentItem {
+                        newWebView.go(to: newAll[index])
+                    }
+                }
+            } else {
+                addressField.stringValue = item.url.absoluteString
+                webView.go(to: item)
+                window?.makeFirstResponder(tab.pageResponder)
+            }
             updateChrome()
         }
         s.switchTo = { [unowned self] tab in
