@@ -158,10 +158,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         table.delegate = self
         table.registerForDraggedTypes([.twinkleTab])
         table.onMiddleClick = { [weak self] row in self?.closeTab(at: row) }
-        table.onMouseDown = { [weak self] row in
-            guard let self, row != self.selected else { return }
-            self.select(row)
-        }
+        table.onMouseDown = { [weak self] row in self?.select(row) }
+        table.onEmptyClick = { [weak self] in self?.focusPage() }
+        root.onMouseDown = { [weak self] in self?.focusPage() }
         table.draggingDestinationFeedbackStyle = .gap
         let menu = NSMenu()
         menu.delegate = self
@@ -439,9 +438,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         scheduleSave()
         if tab.isBlank {
             focusAddress(nil)
-        } else if changed, let responder = tab.pageResponder {
-            window?.makeFirstResponder(responder)
+        } else {
+            focusPage()
         }
+    }
+
+    private func focusPage() {
+        guard let tab = current, !tab.isBlank, let responder = tab.pageResponder else { return }
+        window?.makeFirstResponder(responder)
     }
 
     func closeTab(at index: Int) {
@@ -1795,7 +1799,10 @@ final class TabRowView: NSTableRowView {
 /// The tab list: a middle click on a tab closes it.
 /// The sidebar's background: dragging it moves the window.
 final class SidebarView: NSVisualEffectView {
+    var onMouseDown: (() -> Void)?
+
     override func mouseDown(with event: NSEvent) {
+        onMouseDown?()
         if let window { window.performDrag(with: event) } else { super.mouseDown(with: event) }
     }
 }
@@ -1803,14 +1810,18 @@ final class SidebarView: NSVisualEffectView {
 final class TabTableView: NSTableView {
     var onMiddleClick: ((Int) -> Void)?
     var onMouseDown: ((Int) -> Void)?
+    var onEmptyClick: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool { false }
 
     /// Tabs switch the moment the button goes down, not when it comes up
     /// (a table that allows dragging normally waits for mouse-up).
     override func mouseDown(with event: NSEvent) {
         let row = self.row(at: convert(event.locationInWindow, from: nil))
-        // The blank space around and below the tabs moves the window, as
-        // the title bar would.
+        // The blank space around and below the tabs focuses the page and
+        // moves the window, as the title bar would.
         if row < 0, !event.modifierFlags.contains(.control), let window {
+            onEmptyClick?()
             return window.performDrag(with: event)
         }
         if row >= 0, !event.modifierFlags.contains(.control) { onMouseDown?(row) }
