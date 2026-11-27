@@ -63,7 +63,7 @@ protocol TabHost: AnyObject {
     func tab(_ tab: Tab, popupWith configuration: WKWebViewConfiguration) -> WKWebView?
     func tabWantsClose(_ tab: Tab)
     /// The tab tried to go to a site that always opens in another container.
-    func tab(_ tab: Tab, open url: URL, inAssigned container: UUID)
+    func tab(_ tab: Tab, open url: URL, inAssigned container: UUID?)
     /// The link under the pointer changed; nil when it's off a link.
     func tab(_ tab: Tab, hoversLink url: URL?)
 }
@@ -497,14 +497,14 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// and not pop-ups or sites you put in this container yourself. Nor
     /// does anything in a container AppleScript may drive, so a script's
     /// pages never land in a container it can't reach.
-    private func assignedElsewhere(_ url: URL, action: WKNavigationAction) -> UUID? {
+    private func assignedElsewhere(_ url: URL, action: WKNavigationAction) -> UUID?? {
         guard !isPopup, !AppState.shared.allowsAppleScript(containerID), ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
               (action.request.httpMethod ?? "GET").uppercased() == "GET",
               ![.backForward, .reload, .formResubmitted, .formSubmitted].contains(action.navigationType),
               let assignment = AppState.shared.assignment(forHost: url.host()),
-              assignment.container.id != containerID,
+              assignment.container?.id != containerID,
               assignment.site != exemptSite else { return nil }
-        return assignment.container.id
+        return .some(assignment.container?.id)
     }
 
     /// The `https:` address to load instead of an `http:` page, like

@@ -145,7 +145,7 @@ enum MainMenu {
         ContainerMenus.fill(reopenInContainer, action: #selector(BrowserWindowController.reopenInContainer(_:)),
                             target: nil, shortcuts: false, temporary: true)
         ContainerMenus.fill(assignSite, action: #selector(BrowserWindowController.assignSite(_:)),
-                            target: nil, shortcuts: false, noneTitle: "Any Container")
+                            target: nil, shortcuts: false, any: true)
     }
 
     private static func recentlyClosedItem() -> NSMenuItem {

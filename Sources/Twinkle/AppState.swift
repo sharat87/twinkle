@@ -208,15 +208,15 @@ final class AppState {
         return containers.first { $0.id == id } ?? temporaries.first { $0.id == id }
     }
 
-    /// The container a site always opens in, from `domains`.
-    func assignment(forHost host: String?) -> (container: Container, site: String)? {
+    /// The container a site always opens in (nil: no container), from `domains`.
+    func assignment(forHost host: String?) -> (container: Container?, site: String)? {
         domains.assignment(forHost: host, in: containers)
     }
 
-    /// Makes `host`'s site always open in `container` (nil: in whatever
-    /// container the tab is in) and saves settings.json.
-    func assign(host: String, to container: UUID?) {
-        let name = self.container(container)?.name
+    /// Makes `host`'s site always open in the container called `name`
+    /// (`Domains.noContainer`: no container; nil: in whatever container the
+    /// tab is in) and saves settings.json.
+    func assign(host: String, toContainerNamed name: String?) {
         var changed = domains
         changed.setContainer(name, forHost: host)
         _ = save(domains: changed)
@@ -278,6 +278,10 @@ final class AppState {
     /// nil when settings.json has an error, so the container couldn't be
     /// saved, or there's already a container by that name.
     func addContainer(named name: String) -> Container? {
+        if Domains.isNoContainer(name) {
+            Status.show("\(name) can't be a container's name: in settings.json it means no container.")
+            return nil
+        }
         if containers.contains(where: { $0.name.lowercased() == name.lowercased() }) {
             Status.show("There's already a container called \(name).")
             return nil

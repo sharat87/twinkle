@@ -401,8 +401,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
                  exempt: Bool = false, history: Data? = nil) -> Tab {
         var container = container
         var exemptSite: String?
-        if let assignment = AppState.shared.assignment(forHost: url?.host()), assignment.container.id != container {
-            if exempt { exemptSite = assignment.site } else { container = assignment.container.id }
+        if let assignment = AppState.shared.assignment(forHost: url?.host()), assignment.container?.id != container {
+            if exempt { exemptSite = assignment.site } else { container = assignment.container?.id }
         }
         let tab = Tab(url: url, title: title, container: container, host: self, history: history)
         tab.exemptSite = exemptSite
@@ -609,7 +609,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
 
     /// A fresh tab is replaced by one in the right container; a tab with a
     /// page keeps it, and the site opens in a new tab beside it.
-    func tab(_ tab: Tab, open url: URL, inAssigned container: UUID) {
+    func tab(_ tab: Tab, open url: URL, inAssigned container: UUID?) {
         guard let i = index(of: tab) else { return }
         let fresh = tab.webView?.backForwardList.currentItem == nil
         let front = i == selected
@@ -1025,12 +1025,28 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     /// the tab there.
     @objc func assignSite(_ sender: NSMenuItem) {
         guard let host = current?.url?.host() else { return }
-        let container = sender.representedObject as? UUID
-        AppState.shared.assign(host: host, to: container)
-        let name = AppState.shared.container(container)?.name
         let site = Hosts.siteKey(host)
-        Status.show(name.map { "\(site) will always open in \($0)." } ?? "\(site) opens in any container.")
-        if let container, container != current?.containerID {
+        if sender.representedObject as? String == ContainerMenus.anyChoice {
+            AppState.shared.assign(host: host, toContainerNamed: nil)
+            Status.show("\(site) opens in any container.")
+            current?.exemptSite = nil
+            return
+        }
+        let container = sender.representedObject as? UUID
+        let name: String
+        if let container {
+            guard let found = AppState.shared.container(container)?.name else { return }
+            guard !Domains.isNoContainer(found) else {
+                Status.show("Sites can't be assigned to a container called \(found): in settings.json it means no container. Rename it.")
+                return
+            }
+            name = found
+        } else {
+            name = Domains.noContainer
+        }
+        AppState.shared.assign(host: host, toContainerNamed: name)
+        Status.show(container == nil ? "\(site) will always open in no container." : "\(site) will always open in \(name).")
+        if container != current?.containerID {
             reopen(at: selected, in: container)
         } else {
             current?.exemptSite = nil
@@ -1357,8 +1373,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             return current?.url != nil
         case #selector(assignSite(_:)):
             let host = current?.url?.host()
-            let assigned = AppState.shared.assignment(forHost: host)?.container.id
-            item.state = (item.representedObject as? UUID) == assigned ? .on : .off
+            let assignment = AppState.shared.assignment(forHost: host)
+            let on = item.representedObject as? String == ContainerMenus.anyChoice
+                ? assignment == nil
+                : assignment != nil && (item.representedObject as? UUID) == assignment?.container?.id
+            item.state = on ? .on : .off
             return host != nil
         case #selector(toggleBlockingForSite(_:)):
             let host = current?.url?.host()
@@ -1474,7 +1493,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
             writtenHistories[saved.id] = history
             let tab = Tab(url: url, title: saved.title, container: saved.container, host: self, id: saved.id, history: history)
             // Restored where you left it, even if the site is assigned elsewhere.
-            if let assignment = AppState.shared.assignment(forHost: url.host()), assignment.container.id != saved.container {
+            if let assignment = AppState.shared.assignment(forHost: url.host()), assignment.container?.id != saved.container {
                 tab.exemptSite = assignment.site
             }
             tabs.append(tab)
@@ -1627,6 +1646,8 @@ final class TabCell: NSTableCellView {
 enum ContainerMenus {
     /// `representedObject` of the "New Temporary Container" item.
     static let temporaryChoice = "temporary"
+    /// `representedObject` of Always Open This Site In › Any Container.
+    static let anyChoice = "any"
 
     static func make(action: Selector, target: AnyObject?, tag: Int = 0, current: UUID? = nil,
                      shortcuts: Bool, temporary: Bool = false) -> NSMenu {
@@ -1645,15 +1666,15 @@ enum ContainerMenus {
     }
 
     static func isCurrent(_ item: NSMenuItem, _ container: UUID?) -> Bool {
-        if item.representedObject as? String == temporaryChoice { return false }
+        if item.representedObject is String { return false }
         if let id = item.representedObject as? UUID { return id == container }
         return container == nil
     }
 
     static func fill(_ menu: NSMenu, action: Selector, target: AnyObject?, tag: Int = 0, shortcuts: Bool,
-                     temporary: Bool = false, noneTitle: String = "No Container") {
+                     temporary: Bool = false, any: Bool = false) {
         menu.removeAllItems()
-        let none = NSMenuItem(title: noneTitle, action: action, keyEquivalent: shortcuts ? "0" : "")
+        let none = NSMenuItem(title: "No Container", action: action, keyEquivalent: shortcuts ? "0" : "")
         none.keyEquivalentModifierMask = [.control, .command]
         none.target = target
         none.tag = tag
@@ -1673,6 +1694,14 @@ enum ContainerMenus {
             let item = NSMenuItem(title: "New Temporary Container", action: action, keyEquivalent: "")
             item.representedObject = temporaryChoice
             item.image = .dot(NSColor(hex: "#8E8E93"))
+            item.target = target
+            item.tag = tag
+            menu.addItem(item)
+        }
+        if any {
+            menu.addItem(.separator())
+            let item = NSMenuItem(title: "Any Container", action: action, keyEquivalent: "")
+            item.representedObject = anyChoice
             item.target = target
             item.tag = tag
             menu.addItem(item)

@@ -8,7 +8,9 @@ public struct DomainSettings: Codable, Equatable, Sendable {
     public var zoom: Double?
     /// Whether the content blocker is off for this domain.
     public var adBlockingOff: Bool?
-    /// Name of the container that URLs with this domain open in.
+    /// Name of the container that URLs with this domain open in, or
+    /// `Domains.noContainer` for no container. "" undoes a parent domain's
+    /// assignment: the site opens in any container.
     public var container: String?
 
     public init(zoom: Double? = nil, adBlockingOff: Bool? = nil, container: String? = nil) {
@@ -25,6 +27,13 @@ public struct DomainSettings: Codable, Equatable, Sendable {
 /// specific entry that has it wins.
 public struct Domains: Codable, Equatable, Sendable {
     public static let wildcard = "*"
+    /// The `container` value for "always open in no container". Reserved:
+    /// no container can be called that.
+    public static let noContainer = "none"
+
+    public static func isNoContainer(_ name: String) -> Bool {
+        name.caseInsensitiveCompare(noContainer) == .orderedSame
+    }
 
     public var entries: [String: DomainSettings]
 
@@ -103,14 +112,19 @@ public struct Domains: Codable, Equatable, Sendable {
         return target
     }
 
-    /// The container assigned to `host` and the `domains` entry that matched it.
-    public func assignment(forHost host: String?, in containers: [Container]) -> (container: Container, site: String)? {
+    /// The container assigned to `host` (nil: no container) and the
+    /// `domains` entry that matched it. nil when the site isn't assigned, or
+    /// its container doesn't exist.
+    public func assignment(forHost host: String?, in containers: [Container]) -> (container: Container?, site: String)? {
         guard let (name, site) = entry(\.container, forHost: host), !name.isEmpty else { return nil }
+        if Self.isNoContainer(name) { return (nil, site) }
         let match = containers.first { $0.name == name }
             ?? containers.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
         return match.map { ($0, site) }
     }
 
+    /// Assigns `host`'s site to the container called `name`
+    /// (`noContainer`: no container; nil: unassigned, any container).
     @discardableResult
     public mutating func setContainer(_ name: String?, forHost host: String) -> String {
         let target = Hosts.siteKey(host)

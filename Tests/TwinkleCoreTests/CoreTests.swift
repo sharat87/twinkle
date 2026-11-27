@@ -248,11 +248,11 @@ let ddg = "https://duckduckgo.com/?q=%s"
             "mail.example.com": DomainSettings(container: "Work"),
             "corp.io": DomainSettings(container: "work"),
         ])
-        #expect(domains.assignment(forHost: "example.com", in: containers)?.container.name == "Personal")
-        #expect(domains.assignment(forHost: "www.example.com", in: containers)?.container.name == "Personal")
-        #expect(domains.assignment(forHost: "mail.example.com", in: containers)?.container.name == "Work")
-        #expect(domains.assignment(forHost: "a.mail.example.com", in: containers)?.container.name == "Work")
-        #expect(domains.assignment(forHost: "WWW.CORP.IO.", in: containers)?.container.name == "Work")
+        #expect(domains.assignment(forHost: "example.com", in: containers)?.container?.name == "Personal")
+        #expect(domains.assignment(forHost: "www.example.com", in: containers)?.container?.name == "Personal")
+        #expect(domains.assignment(forHost: "mail.example.com", in: containers)?.container?.name == "Work")
+        #expect(domains.assignment(forHost: "a.mail.example.com", in: containers)?.container?.name == "Work")
+        #expect(domains.assignment(forHost: "WWW.CORP.IO.", in: containers)?.container?.name == "Work")
         #expect(domains.assignment(forHost: "notexample.com", in: containers) == nil)
         #expect(domains.assignment(forHost: nil, in: containers) == nil)
     }
@@ -265,7 +265,7 @@ let ddg = "https://duckduckgo.com/?q=%s"
         ])
         #expect(domains.setContainer("Personal", forHost: "www.corp.io") == "corp.io")
         #expect(domains.entries["corp.io"]?.container == "Personal")
-        #expect(domains.assignment(forHost: "corp.io", in: containers)?.container.name == "Personal")
+        #expect(domains.assignment(forHost: "corp.io", in: containers)?.container?.name == "Personal")
 
         // Clearing removes the entry when there is no inherited default.
         #expect(domains.setContainer(nil, forHost: "corp.io") == "corp.io")
@@ -274,8 +274,8 @@ let ddg = "https://duckduckgo.com/?q=%s"
 
         // Assigning a subdomain preserves its parent's container, and clearing it overrides to none.
         domains.setContainer("Work", forHost: "docs.example.com")
-        #expect(domains.assignment(forHost: "docs.example.com", in: containers)?.container.name == "Work")
-        #expect(domains.assignment(forHost: "example.com", in: containers)?.container.name == "Personal")
+        #expect(domains.assignment(forHost: "docs.example.com", in: containers)?.container?.name == "Work")
+        #expect(domains.assignment(forHost: "example.com", in: containers)?.container?.name == "Personal")
         domains.setContainer(nil, forHost: "docs.example.com")
         #expect(domains.entries["docs.example.com"]?.container == "")
         #expect(domains.assignment(forHost: "docs.example.com", in: containers) == nil)
@@ -284,11 +284,35 @@ let ddg = "https://duckduckgo.com/?q=%s"
 
         // Wildcard container default.
         var withDefault = Domains(["*": DomainSettings(container: "Personal")])
-        #expect(withDefault.assignment(forHost: "any.example", in: containers)?.container.name == "Personal")
+        #expect(withDefault.assignment(forHost: "any.example", in: containers)?.container?.name == "Personal")
         withDefault.setContainer(nil, forHost: "plain.example")
         #expect(withDefault.assignment(forHost: "plain.example", in: containers) == nil)
         withDefault.setContainer("Personal", forHost: "plain.example")
         #expect(withDefault.entries["plain.example"] == nil)
+    }
+
+    @Test func noContainer() {
+        var domains = Domains([
+            "example.com": DomainSettings(container: "Personal"),
+            "plain.example.com": DomainSettings(container: "None"),
+        ])
+        let plain = domains.assignment(forHost: "a.plain.example.com", in: containers)
+        #expect(plain != nil && plain?.container == nil && plain?.site == "plain.example.com")
+        #expect(domains.assignment(forHost: "example.com", in: containers)?.container?.name == "Personal")
+
+        domains.setContainer(Domains.noContainer, forHost: "corp.io")
+        #expect(domains.entries["corp.io"]?.container == "none")
+        #expect(domains.assignment(forHost: "corp.io", in: containers)?.container == nil)
+        #expect(domains.assignment(forHost: "corp.io", in: containers) != nil)
+
+        // Unassigning a subdomain of a no-container site overrides it to any container.
+        domains.setContainer(nil, forHost: "x.plain.example.com")
+        #expect(domains.entries["x.plain.example.com"]?.container == "")
+        #expect(domains.assignment(forHost: "x.plain.example.com", in: containers) == nil)
+
+        // Matching the inherited "none" stores nothing.
+        domains.setContainer("none", forHost: "x.plain.example.com")
+        #expect(domains.entries["x.plain.example.com"] == nil)
     }
 
     @Test func containerDefaultsAndIgnoresLegacySitesKey() throws {
