@@ -3,6 +3,7 @@ import Testing
 @testable import TwinkleCore
 
 let ddg = "https://duckduckgo.com/?q=%s"
+let defaultSearch = ["": ddg]
 
 @Suite struct AddressTests {
     @Test(arguments: [
@@ -19,18 +20,43 @@ let ddg = "https://duckduckgo.com/?q=%s"
         ("  github.com  ", "https://github.com"),
     ])
     func addresses(input: String, expected: String) {
-        #expect(Address.resolve(input, searchTemplate: ddg)?.absoluteString == expected)
+        #expect(Address.resolve(input, search: defaultSearch)?.absoluteString == expected)
     }
 
     @Test(arguments: ["hello world", "swift", "what is 2+2?", "foo.bar baz", "1.5"])
     func searches(input: String) {
-        let url = Address.resolve(input, searchTemplate: ddg)
+        let url = Address.resolve(input, search: defaultSearch)
         #expect(url?.host() == "duckduckgo.com")
     }
 
     @Test func searchEncoding() {
-        let url = Address.resolve("a&b c", searchTemplate: ddg)
+        let url = Address.resolve("a&b c", search: defaultSearch)
         #expect(url?.absoluteString == "https://duckduckgo.com/?q=a%26b%20c")
+    }
+
+    @Test func searchPrefixes() {
+        let engines = [
+            "": ddg,
+            "!": "https://duckduckgo.com/?q=%s%20!",
+            "ai": "https://duck.ai/?q=%s",
+        ]
+        #expect(Address.parse("! swift concurrency", search: engines)
+            == .search(url: URL(string: "https://duckduckgo.com/?q=swift%20concurrency%20!")!, query: "swift concurrency"))
+        #expect(Address.parse("ai   what is an armadillo", search: engines)
+            == .search(url: URL(string: "https://duck.ai/?q=what%20is%20an%20armadillo")!, query: "what is an armadillo"))
+        #expect(Address.parse("AI armadillo", search: engines)
+            == .search(url: URL(string: "https://duck.ai/?q=armadillo")!, query: "armadillo"))
+        // Prefix search wins even when the query looks like a URL.
+        #expect(Address.parse("! example.com", search: engines)
+            == .search(url: URL(string: "https://duckduckgo.com/?q=example.com%20!")!, query: "example.com"))
+        // Bare prefix with no query falls back to the default search.
+        #expect(Address.parse("ai", search: engines)
+            == .search(url: URL(string: "https://duckduckgo.com/?q=ai")!, query: "ai"))
+        #expect(Address.parse("ai   ", search: engines)
+            == .search(url: URL(string: "https://duckduckgo.com/?q=ai")!, query: "ai"))
+        // Omitting "" still falls back to the default engine.
+        #expect(Address.resolve("hello", search: ["ai": "https://duck.ai/?q=%s"])?.absoluteString
+            == "https://duckduckgo.com/?q=hello")
     }
 
     @Test func samePage() {
@@ -79,14 +105,20 @@ let ddg = "https://duckduckgo.com/?q=%s"
     @Test func partialFileKeepsDefaults() throws {
         let s = try JSONDecoder().decode(Settings.self, from: Data(#"{"historyDays": 30}"#.utf8))
         #expect(s.historyDays == 30)
-        #expect(s.searchURL == Settings().searchURL)
+        #expect(s.search == Settings().search)
     }
 
     @Test func ignoresRemovedSettingsKeys() throws {
-        let json = #"{"windowTitleFormat": "{title}", "adBlocking": false, "adBlockingOffFor": ["example.com"], "historyDays": 90}"#
+        let json = #"{"searchURL": "https://example.com/?q=%s", "windowTitleFormat": "{title}", "adBlocking": false, "adBlockingOffFor": ["example.com"], "historyDays": 90}"#
         let s = try JSONDecoder().decode(Settings.self, from: Data(json.utf8))
         #expect(s.historyDays == 90)
-        #expect(s.searchURL == Settings().searchURL)
+        #expect(s.search == Settings().search)
+    }
+
+    @Test func searchConfigDecodes() throws {
+        let json = #"{"search": {"": "https://kagi.com/search?q=%s", "!": "https://duckduckgo.com/?q=%s%20!"}}"#
+        let s = try JSONDecoder().decode(Settings.self, from: Data(json.utf8))
+        #expect(s.search == ["": "https://kagi.com/search?q=%s", "!": "https://duckduckgo.com/?q=%s%20!"])
     }
 
     @Test func containersLiveInTheSameFile() throws {
@@ -101,7 +133,7 @@ let ddg = "https://duckduckgo.com/?q=%s"
         let again = try JSONDecoder().decode(SettingsFile.self, from: JSONEncoder().encode(file))
         #expect(again == file)
         let keys = try JSONSerialization.jsonObject(with: JSONEncoder().encode(file)) as! [String: Any]
-        #expect(keys["containers"] != nil && keys["searchURL"] != nil)
+        #expect(keys["containers"] != nil && keys["search"] != nil && keys["searchURL"] == nil)
         #expect((keys["containers"] as? [String: [String: Any]])?["Work"]?["name"] == nil)
     }
 

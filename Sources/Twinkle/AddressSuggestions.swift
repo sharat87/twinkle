@@ -244,13 +244,15 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
     /// Row 0: what the field says, as an address or a search. Named after
     /// the page if it's one you've been to.
     private func typedRow(_ text: String, index: HistoryIndex) -> Row {
-        let settings = AppState.shared.settings
-        guard let url = Address.resolve(text, searchTemplate: settings.searchURL) else {
+        let url: URL
+        switch Address.parse(text, search: AppState.shared.settings.search) {
+        case nil:
             return Row(kind: .typed, title: text, detail: "", url: nil)
-        }
-        if Address.asURL(text) == nil {
-            let engine = URL(string: settings.searchURL)?.host() ?? "the web"
-            return Row(kind: .typed, title: "Search for “\(text)”", detail: engine, url: nil)
+        case .search(let target, let query):
+            let engine = target.host() ?? "the web"
+            return Row(kind: .typed, title: "Search for “\(query)”", detail: engine, url: nil)
+        case .url(let parsed):
+            url = parsed
         }
         let bookmarks = AppState.shared.bookmarkIndex
         let keys = [url.absoluteString, url.absoluteString + "/"]
@@ -330,7 +332,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         case .history(let item):
             goTo(item, newTab)
         case .typed where row.url == nil:
-            if let url = Address.resolve(fieldText, searchTemplate: AppState.shared.settings.searchURL) { open(url, newTab) }
+            if let url = Address.resolve(fieldText, search: AppState.shared.settings.search) { open(url, newTab) }
         default:
             if let url = row.url { open(url, newTab) }
         }

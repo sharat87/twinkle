@@ -65,7 +65,7 @@ Everything lives in Twinkle's sandbox container, in `~/Library/Containers/dev.tw
 
 | File | What |
 |---|---|
-| `settings.json` | Search engine, downloads folder, filter lists, your containers, and settings per domain (`zoom`, `adBlockingOff`, `container`). Missing keys take defaults. |
+| `settings.json` | Search engines, downloads folder, filter lists, your containers, and settings per domain (`zoom`, `adBlockingOff`, `container`). Missing keys take defaults. |
 | `session.json` | Open tabs, restored at launch. |
 | `tab-history/` | Each open tab's back/forward list (with scroll positions and form contents), one file per tab named by its id in `session.json`, so tabs come back with their Back and Forward. |
 | `filters/custom.txt` | Your own filter rules. |
@@ -82,7 +82,9 @@ Downloads can only go to `~/Downloads` (or a folder in it): that's all the sandb
 
 ```json
 {
-  "searchURL": "https://duckduckgo.com/?q=%s",
+  "search": {
+    "": "https://duckduckgo.com/?q=%s"
+  },
   "downloadsDirectory": "~/Downloads",
   "filterLists": [
     "https://easylist.to/easylist/easylist.txt",
@@ -95,6 +97,8 @@ Downloads can only go to `~/Downloads` (or a folder in it): that's all the sandb
   "monospaceFontSize": 18
 }
 ```
+
+`search` maps prefixes to URL templates (`%s` becomes the query): `""` is the default search, and any other key matches `<key> <query>` in the address bar (for example `"!": "https://duckduckgo.com/?q=%s%20!"` or `"ai": "https://duck.ai/?q=%s"`). If `""` is omitted, plain searches fall back to DuckDuckGo.
 
 `domains` holds settings per domain (`zoom`, which ⌘+ and ⌘- remember, `adBlockingOff`, and `container` by container name, or `"none"` for no container): `"domains": {"example.com": {"zoom": 1.25, "adBlockingOff": true, "container": "Personal"}}`. An entry covers its subdomains, the most specific one winning. `"*"` sets defaults across all sites: `"*": {"adBlockingOff": true}` turns ad blocking off everywhere except sites with `"adBlockingOff": false`, and `"*": {"zoom": 1.1}` sets a default zoom level for all URLs.
 

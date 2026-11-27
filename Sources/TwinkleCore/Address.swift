@@ -1,13 +1,40 @@
 import Foundation
 
-/// Turns what was typed in the address field into a URL to load: an address
-/// if it looks like one, otherwise a search.
+/// Turns what was typed in the address field into a URL to load: a prefixed
+/// search, an address if it looks like one, or the default search.
 public enum Address {
-    public static func resolve(_ raw: String, searchTemplate: String) -> URL? {
+    public enum Resolution: Equatable, Sendable {
+        case url(URL)
+        case search(url: URL, query: String)
+    }
+
+    public static func resolve(_ raw: String, search engines: [String: String]) -> URL? {
+        switch parse(raw, search: engines) {
+        case .url(let url), .search(let url, _): return url
+        case nil: return nil
+        }
+    }
+
+    public static func parse(_ raw: String, search engines: [String: String]) -> Resolution? {
         let input = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { return nil }
-        if let url = asURL(input) { return url }
-        return search(input, template: searchTemplate)
+        if let space = input.firstIndex(where: \.isWhitespace) {
+            let prefix = String(input[..<space])
+            let query = String(input[space...].drop(while: \.isWhitespace))
+            if !prefix.isEmpty, !query.isEmpty, let template = template(forPrefix: prefix, in: engines) {
+                return search(query, template: template).map { .search(url: $0, query: query) }
+            }
+        }
+        if let url = asURL(input) { return .url(url) }
+        let fallback = engines[""] ?? Settings.defaultSearchURL
+        return search(input, template: fallback).map { .search(url: $0, query: input) }
+    }
+
+    private static func template(forPrefix prefix: String, in engines: [String: String]) -> String? {
+        if let exact = engines[prefix] { return exact }
+        return engines.keys.sorted()
+            .first { !$0.isEmpty && $0.caseInsensitiveCompare(prefix) == .orderedSame }
+            .flatMap { engines[$0] }
     }
 
     public static func search(_ query: String, template: String) -> URL? {

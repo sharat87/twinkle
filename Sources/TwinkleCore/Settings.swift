@@ -3,8 +3,9 @@ import Foundation
 /// `settings.json`. Every key is optional in the file; missing ones take the
 /// defaults below, so the file only needs what you want to change.
 public struct Settings: Codable, Equatable, Sendable {
-    /// Where words typed in the address field go. `%s` becomes the query.
-    public var searchURL: String
+    /// Search engines keyed by prefix (`""` is the default; another key like
+    /// `"!"` or `"ai"` matches `<key> <query>`). `%s` becomes the query.
+    public var search: [String: String]
     /// Where downloads are saved. `~` is expanded. Default: ~/Downloads.
     public var downloadsDirectory: String
     /// Filter lists (EasyList/uBlock syntax, or hosts files) to download.
@@ -21,13 +22,15 @@ public struct Settings: Codable, Equatable, Sendable {
     public var monospaceFont: String
     public var monospaceFontSize: Double
 
+    public static let defaultSearchURL = "https://duckduckgo.com/?q=%s"
+
     public static let defaultFilterLists = [
         "https://easylist.to/easylist/easylist.txt",
         "https://easylist.to/easylist/easyprivacy.txt",
     ]
 
     public init() {
-        searchURL = "https://duckduckgo.com/?q=%s"
+        search = ["": Settings.defaultSearchURL]
         downloadsDirectory = "~/Downloads"
         filterLists = Settings.defaultFilterLists
         filterListRefreshDays = 4
@@ -38,14 +41,14 @@ public struct Settings: Codable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case searchURL, downloadsDirectory, filterLists, filterListRefreshDays,
+        case search, downloadsDirectory, filterLists, filterListRefreshDays,
              unloadTabsAfterMinutes, historyDays, monospaceFont, monospaceFontSize
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Settings()
-        searchURL = try c.decodeIfPresent(String.self, forKey: .searchURL) ?? d.searchURL
+        search = try c.decodeIfPresent([String: String].self, forKey: .search) ?? d.search
         downloadsDirectory = try c.decodeIfPresent(String.self, forKey: .downloadsDirectory) ?? d.downloadsDirectory
         filterLists = try c.decodeIfPresent([String].self, forKey: .filterLists) ?? d.filterLists
         filterListRefreshDays = try c.decodeIfPresent(Double.self, forKey: .filterListRefreshDays) ?? d.filterListRefreshDays
