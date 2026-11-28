@@ -25,8 +25,6 @@ My minimal web browser for macOS, built on the system's WebKit. Vibed just for m
   <img alt="Twinkle showing Apple's WKWebView documentation in a Work container, with the tab list on the right" src="docs/screenshot-light.png">
 </picture>
 
-<img alt="Twinkle's Tools menu open over a GitHub page: every action is a menu item, and the address field is in Monaco so look-alike letters stand apart" src="docs/screenshot-menus.png" width="751">
-
 ## Build and run
 
 No packaged versions for now. Build and perhaps vibe more things yourself. You can ask your agent to build.
