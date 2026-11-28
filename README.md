@@ -95,7 +95,7 @@ Searches go to DuckDuckGo, and there's no search setting: use DuckDuckGo's `!ban
 
 ### Importing from Safari
 
-File › Import from Safari… copies Safari's history, bookmarks and cookies in. macOS keeps those behind Full Disk Access, so first add Twinkle under System Settings › Privacy & Security › Full Disk Access (the import offers to open it), quit and reopen Twinkle, and import. Turn the access off again afterwards if you like. Twinkle is signed ad hoc, so a rebuild in between makes macOS treat it as a different app.
+File › Import from Safari… copies Safari's history, bookmarks and cookies in. macOS keeps those behind Full Disk Access, so first add Twinkle under System Settings › Privacy & Security › Full Disk Access (the import offers to open it), quit and reopen Twinkle, and import. Turn the access off again afterwards if you like.
 
 - History is merged into `history.sqlite`: visits add up, pages older than `historyDays` are left out.
 - Bookmarks go into `bookmarks.json` (title, address, folder), which the address bar searches above history. There's no bookmarks bar; edit the file to change them.
