@@ -35,6 +35,9 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
     private let table = SuggestionTable()
     private let scroll = NSScrollView()
     private let background = NSVisualEffectView()
+    /// The keys for the chosen row, under the list: never a row itself, so
+    /// ↑/↓ and the mouse can't land on it.
+    private let hint = NSTextField(labelWithString: "")
     private var rows: [Row] = []
     private var highlighted = 0
     /// What was typed, without the inline completion.
@@ -47,6 +50,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
     static let rowHeight: CGFloat = 38
     static let maxRows = 9
     static let maxWidth: CGFloat = 960
+    static let hintHeight: CGFloat = 26
 
     init(field: NSTextField, anchor: NSView) {
         self.field = field
@@ -94,7 +98,17 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
             scroll.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 5),
             scroll.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -5),
             scroll.topAnchor.constraint(equalTo: background.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: background.bottomAnchor),
+            scroll.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -Self.hintHeight),
+        ])
+        hint.font = .systemFont(ofSize: UI.textSize - 4)
+        hint.textColor = .secondaryLabelColor
+        hint.lineBreakMode = .byTruncatingTail
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        background.addSubview(hint)
+        NSLayoutConstraint.activate([
+            hint.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 15),
+            hint.trailingAnchor.constraint(lessThanOrEqualTo: background.trailingAnchor, constant: -15),
+            hint.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -9),
         ])
         // The window stays its full height; only this box changes size.
         let holder = NSView()
@@ -107,6 +121,18 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
     var debugRows: [String] {
         guard showing else { return [] }
         return rows.enumerated().map { i, r in "\(i == highlighted ? "> " : "  ")\(r.title) | \(r.detail)" }
+            + ["  (\(hint.stringValue))"]
+    }
+
+    /// What ↩ and ⌘↩ do with the highlighted row (see perform).
+    private func updateHint() {
+        guard rows.indices.contains(highlighted) else { return }
+        let enter: String
+        switch rows[highlighted].kind {
+        case .tab: enter = "Switch to this tab"
+        default: enter = "Open here"
+        }
+        hint.stringValue = "↩ \(enter)      ⌘↩ Open in new tab"
     }
 
     /// Before the first key: history loaded, the list laid out once, so
@@ -165,6 +191,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         fieldText = field.stringValue
         typed = fieldText
         table.reloadData()
+        updateHint()
         show()
         table.scrollRowToVisible(highlighted)
     }
@@ -238,6 +265,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         self.rows = rows
         highlighted = 0
         table.reloadData()
+        updateHint()
         show()
     }
 
@@ -304,6 +332,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         guard rows.indices.contains(row), row != highlighted else { return }
         let old = highlighted
         highlighted = row
+        updateHint()
         table.scrollRowToVisible(row)
         for r in [old, row] {
             let on = r == highlighted
@@ -367,11 +396,11 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
     private func place(rows count: Int) {
         guard let window = anchor.window else { return }
         let box = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-        let full = CGFloat(Self.maxRows) * Self.rowHeight + 10
+        let full = CGFloat(Self.maxRows) * Self.rowHeight + 10 + Self.hintHeight
         let width = min(box.width, Self.maxWidth)
         let frame = NSRect(x: box.minX, y: box.minY - 6 - full, width: width, height: full)
         if panel.frame != frame { panel.setFrame(frame, display: false) }
-        let height = CGFloat(min(count, Self.maxRows)) * Self.rowHeight + 10
+        let height = CGFloat(min(count, Self.maxRows)) * Self.rowHeight + 10 + Self.hintHeight
         let inner = NSRect(x: 0, y: full - height, width: width, height: height)
         if background.frame != inner {
             background.frame = inner
