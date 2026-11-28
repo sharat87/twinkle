@@ -581,6 +581,14 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
         Downloads.shared.track(download)
     }
 
+    /// Context menu downloads ("Download Image", "Download Linked File",
+    /// etc.). WebKit creates the download directly without a navigation
+    /// action and hands it to this private WKNavigationDelegate method.
+    @objc(_webView:contextMenuDidCreateDownload:)
+    func webView(_ webView: WKWebView, contextMenuDidCreateDownload download: WKDownload) {
+        Downloads.shared.track(download)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         fetchIcon()
     }
@@ -713,7 +721,15 @@ final class Tab: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        host?.tab(self, popupWith: configuration)
+        // WebKit blocks web-initiated top-level navigations to data: URLs
+        // (such as "Open Image in New Window" on an inline data: image) with
+        // "Frame load interrupted", leaving a popup tab blank. Loading it as
+        // a browser-initiated navigation in a new tab works.
+        if let url = action.request.url, url.scheme?.lowercased() == "data" {
+            host?.tab(self, open: url, inBackground: false)
+            return nil
+        }
+        return host?.tab(self, popupWith: configuration)
     }
 
     /// The download button of WebKit's PDF viewer. It calls this private

@@ -436,7 +436,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
         syncTableSelection()
         updateChrome()
         scheduleSave()
-        if tab.isBlank {
+        if tab.isBlank && !tab.isPopup {
             focusAddress(nil)
         } else {
             focusPage()
