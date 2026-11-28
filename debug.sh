@@ -16,21 +16,18 @@
 #   ./debug.sh mouse "move <x> <y>"     move the mouse there (link hovering), same points
 #   ./debug.sh appearance <light|dark|system>   for screenshots of both
 #   ./debug.sh applescript <script>     run AppleScript inside a tell to Twinkle, print the result
-# Writes state.json, window.png, page.png (switcher.png while the ⌃Tab list is up) to Twinkle's folder in its sandbox
-# container (~/Library/Containers/dev.twinkle.Twinkle/…/Twinkle/debug/).
-# TWINKLE_PROFILE=<folder> ./debug.sh … drives the Twinkle started with
-# `./build.sh release run --profile <folder>` instead, and its files are in <folder>/debug/.
+# TWINKLE_PROFILE=<folder> is required: it drives the Twinkle started with
+# `./build.sh release run --profile <folder>`. The usual Twinkle doesn't listen.
+# Writes state.json, window.png, page.png (switcher.png while the ⌃Tab list is up) to <folder>/debug/.
 set -euo pipefail
 cd "$(dirname "$0")"
-# The usual Twinkle is sandboxed: its dumps are in its container, which
-# macOS keeps from other apps (debug.sh included) unless you allow it.
-dir="$HOME/Library/Containers/dev.twinkle.Twinkle/Data/Library/Application Support/Twinkle/debug"
-suffix=""
-if [[ -n "${TWINKLE_PROFILE:-}" ]]; then
-  profile="$(cd "$TWINKLE_PROFILE" && pwd -P)"
-  dir="$profile/debug"
-  suffix=":$profile"
+if [[ -z "${TWINKLE_PROFILE:-}" ]]; then
+  echo "Set TWINKLE_PROFILE=<folder> to a --profile Twinkle's folder: only those listen to debug.sh." >&2
+  exit 1
 fi
+profile="$(cd "$TWINKLE_PROFILE" && pwd -P)"
+dir="$profile/debug"
+suffix=":$profile"
 tool=.build/post-notification
 [[ -x "$tool" && "$tool" -nt scripts/post-notification.swift ]] || swiftc -o "$tool" scripts/post-notification.swift
 if [[ "${1:-}" == "open" ]]; then

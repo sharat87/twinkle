@@ -3,14 +3,16 @@ import WebKit
 
 /// A way to look inside a running Twinkle from the shell, without screen
 /// recording permission: `./debug.sh` posts a distributed notification and
-/// Twinkle writes its state to debug/ in its folder
-/// (~/Library/Application Support/Twinkle/, or the `--profile` folder):
+/// Twinkle writes its state to debug/ in its `--profile` folder:
 ///
 /// - state.json  the tabs, their addresses, titles, loading state, container
 /// - window.png  the window's own views (sidebar, toolbar)
 /// - page.png    the current page, as WebKit renders it
 ///
-/// It only writes files on this Mac, and only when asked.
+/// Only a `--profile` Twinkle listens. Any program can post these, without
+/// the consent macOS asks before scripting an app, and they reach every
+/// container (`applescript` even skips that consent), so the usual Twinkle,
+/// with your real sign-ins, never takes them.
 @MainActor
 enum Debug {
     /// US-layout key codes for letters, so a posted ⌘E is E to WebKit too,
@@ -30,6 +32,7 @@ enum Debug {
     }
 
     static func install(_ controller: @escaping () -> BrowserWindowController?) {
+        guard AppState.shared.profile != nil else { return }
         DistributedNotificationCenter.default().addObserver(forName: notification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated {
                 if let c = controller() { dump(c) }
