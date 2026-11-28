@@ -83,7 +83,7 @@ import Testing
     @Test func partialFileKeepsDefaults() throws {
         let s = try JSONDecoder().decode(Settings.self, from: Data(#"{"historyDays": 30}"#.utf8))
         #expect(s.historyDays == 30)
-        #expect(s.downloadsDirectory == Settings().downloadsDirectory)
+        #expect(s.filterLists == Settings().filterLists)
     }
 
     @Test func ignoresRemovedSettingsKeys() throws {
@@ -96,7 +96,7 @@ import Testing
     }
 
     @Test func containersLiveInTheSameFile() throws {
-        let json = ##"{"historyDays": 30, "containers": [{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Work"}]}"##
+        let json = ##"{"historyDays": 30, "containers": {"Work": {"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF"}}}"##
         let file = try JSONDecoder().decode(SettingsFile.self, from: Data(json.utf8))
         #expect(file.settings.historyDays == 30)
         #expect(file.containers?.map(\.name) == ["Work"])

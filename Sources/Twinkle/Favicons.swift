@@ -36,8 +36,6 @@ final class Favicons {
         let base = AppState.shared.files.directory
         directory = base.appendingPathComponent("site-icons", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        // The old cache, one icon per host whatever the appearance.
-        try? FileManager.default.removeItem(at: base.appendingPathComponent("favicons", isDirectory: true))
         var wasDark = Self.isDark
         appearanceObservation = NSApp.observe(\.effectiveAppearance) { _, _ in
             MainActor.assumeIsolated {

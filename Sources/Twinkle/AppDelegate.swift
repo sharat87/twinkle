@@ -19,9 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = BrowserWindowController()
         self.controller = controller
         Debug.install { [weak self] in self?.controller }
-        // Cookies moved from an unsandboxed Twinkle go in before any page loads.
         Task {
-            await Migration.importDefaultCookies()
             controller.restoreSession()
             for url in pendingURLs { controller.open(url) }
             pendingURLs = []

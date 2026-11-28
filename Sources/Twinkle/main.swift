@@ -9,7 +9,6 @@ MainActor.assumeIsolated {
     UserDefaults.standard.register(defaults: ["WebAutomaticQuoteSubstitutionEnabled": false])
     Integrity.enforce()
     _ = Relaunch.handoff
-    if AppState.profileArgument() == nil { Migration.run() }
     let delegate = AppDelegate()
     app.delegate = delegate
     app.setActivationPolicy(.regular)

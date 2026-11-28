@@ -54,28 +54,27 @@ Twinkle › Restart Twinkle quits and opens the app again, so a rebuild with `./
 
 ## Files
 
-Everything lives in Twinkle's sandbox container, in `~/Library/Containers/dev.twinkle.Twinkle/Data/Library/Application Support/Twinkle/`. The first time another app (your text editor, say) opens one of these, macOS asks whether it may access Twinkle's data. An unsandboxed Twinkle's files, from `~/Library/Application Support/Twinkle/` and `~/Library/WebKit/dev.twinkle.Twinkle/`, are moved in at the first sandboxed launch.
+Everything lives in Twinkle's sandbox container, in `~/Library/Containers/dev.twinkle.Twinkle/Data/Library/Application Support/Twinkle/`. The first time another app (your text editor, say) opens one of these, macOS asks whether it may access Twinkle's data.
 
 | File | What |
 |---|---|
-| `settings.json` | Downloads folder, filter lists, your containers, and settings per domain (`zoom`, `adBlockingOff`, `container`). Missing keys take defaults. |
+| `settings.json` | Filter lists, your containers, and settings per domain (`zoom`, `adBlockingOff`, `container`). Missing keys take defaults. |
 | `session.json` | Open tabs, restored at launch. |
 | `tab-history/` | Each open tab's back/forward list (with scroll positions and form contents), one file per tab named by its id in `session.json`, so tabs come back with their Back and Forward. |
 | `filters/custom.txt` | Your own filter rules. |
 | `filters/cache/` | Downloaded filter lists. |
 | `bookmarks.json` | Bookmarks (from Safari), searched by the address bar. |
 | `history.sqlite` | Pages visited (address, title, visits, last visit), kept `historyDays`. Not written for temporary containers. History › Clear History empties it. |
-| `favicons/` | Site icons for the tab list, one small PNG per host. Not written for temporary containers. |
+| `site-icons/` | Site icons for the tab list, small PNGs per host and appearance. Not written for temporary containers. |
 
 The Twinkle menu opens each of these. WebKit keeps each container's site data in the container's `Library/WebKit/`. When a container is gone from `settings.json`, its cookies and site data are deleted at the next launch.
 
-Downloads can only go to `~/Downloads` (or a folder in it): that's all the sandbox lets Twinkle write.
+Downloads go to `~/Downloads`: that's all the sandbox lets Twinkle write.
 
 ### settings.json
 
 ```json
 {
-  "downloadsDirectory": "~/Downloads",
   "filterLists": [
     "https://easylist.to/easylist/easylist.txt",
     "https://easylist.to/easylist/easyprivacy.txt"
@@ -116,7 +115,7 @@ History is searched in memory (read from `history.sqlite` once), so typing never
 
 ### Containers
 
-They're the `containers` object in settings.json: each container name is a key, and its value has `id` (keys the cookie jar; keep it), `color`, and optional `appleScriptEnabled` (defaults to `false`). Containers are shown alphabetically by name. Existing array-form files are still accepted. Without the key there are no containers, and none of their data is deleted.
+They're the `containers` object in settings.json: each container name is a key, and its value has `id` (keys the cookie jar; keep it), `color`, and optional `appleScriptEnabled` (defaults to `false`). Containers are shown alphabetically by name. Without the key there are no containers, and none of their data is deleted.
 
 ```json
 {

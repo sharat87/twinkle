@@ -448,9 +448,9 @@ final class AppState {
         }
     }
 
+    /// ~/Downloads: the only place the sandbox lets Twinkle save to.
     var downloadsDirectory: URL {
-        let path = Home.expand(settings.downloadsDirectory)
-        return URL(fileURLWithPath: path, isDirectory: true)
+        Home.url.appendingPathComponent("Downloads", isDirectory: true)
     }
 
     static func describe(_ error: Error) -> String {

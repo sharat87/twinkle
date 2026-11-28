@@ -3,8 +3,6 @@ import Foundation
 /// `settings.json`. Every key is optional in the file; missing ones take the
 /// defaults below, so the file only needs what you want to change.
 public struct Settings: Codable, Equatable, Sendable {
-    /// Where downloads are saved. `~` is expanded. Default: ~/Downloads.
-    public var downloadsDirectory: String
     /// Filter lists (EasyList/uBlock syntax, or hosts files) to download.
     public var filterLists: [String]
     /// How often the filter lists are downloaded again.
@@ -25,7 +23,6 @@ public struct Settings: Codable, Equatable, Sendable {
     ]
 
     public init() {
-        downloadsDirectory = "~/Downloads"
         filterLists = Settings.defaultFilterLists
         filterListRefreshDays = 4
         unloadTabsAfterMinutes = 30
@@ -35,14 +32,13 @@ public struct Settings: Codable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case downloadsDirectory, filterLists, filterListRefreshDays,
+        case filterLists, filterListRefreshDays,
              unloadTabsAfterMinutes, historyDays, monospaceFont, monospaceFontSize
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Settings()
-        downloadsDirectory = try c.decodeIfPresent(String.self, forKey: .downloadsDirectory) ?? d.downloadsDirectory
         filterLists = try c.decodeIfPresent([String].self, forKey: .filterLists) ?? d.filterLists
         filterListRefreshDays = try c.decodeIfPresent(Double.self, forKey: .filterListRefreshDays) ?? d.filterListRefreshDays
         unloadTabsAfterMinutes = try c.decodeIfPresent(Double.self, forKey: .unloadTabsAfterMinutes) ?? d.unloadTabsAfterMinutes
@@ -77,8 +73,6 @@ public struct SettingsFile: Codable, Equatable, Sendable {
             containers = nil
         } else if try c.decodeNil(forKey: .containers) {
             containers = nil
-        } else if let legacy = try? c.decode([Container].self, forKey: .containers) {
-            containers = legacy
         } else {
             let values = try c.decode([String: ContainerSettingsValue].self, forKey: .containers)
             containers = values.sorted { $0.key < $1.key }.map { entry in
