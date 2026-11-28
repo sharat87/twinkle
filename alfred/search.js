@@ -16,6 +16,8 @@ function run(argv) {
   try {
     pages = app.search(query.trim(), { limit: 40 });
   } catch (e) {
+    // -1708: a Twinkle from before `search` (built, but not restarted).
+    if (e.errorNumber === -1708 || /not understood/.test(e.message)) return JSON.stringify({ items: [item("This Twinkle can't search yet", "Restart it (Twinkle › Restart Twinkle) to run the latest build")] });
     return JSON.stringify({ items: [item("Couldn't search Twinkle", String(e))] });
   }
   const display = (url) => url.replace(/^[a-z]+:\/\//i, "").replace(/^www\./, "");
