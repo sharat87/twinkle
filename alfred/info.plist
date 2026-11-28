@@ -15,7 +15,7 @@
 	<key>webaddress</key>
 	<string>https://github.com/sharat87/twinkle</string>
 	<key>readme</key>
-	<string>ti &lt;query&gt; searches Twinkle's bookmarks (star) and history (clock), ranked as in its address bar. Return opens the page in Twinkle; ⌘C copies its address. Twinkle has to be running.
+	<string>t &lt;query&gt; searches Twinkle's bookmarks (star) and history (clock), ranked as in its address bar. Return opens the page in Twinkle; ⌘C copies its address. Twinkle has to be running.
 
 The bundleid variable is the Twinkle to ask: dev.twinkle.Twinkle, or dev.twinkle.Twinkle.unsafe for the test build.
 
@@ -39,7 +39,7 @@ Built from alfred/ in the Twinkle repository by scripts/make-alfred-workflow.sh.
 			<key>config</key>
 			<dict>
 				<key>keyword</key>
-				<string>ti</string>
+				<string>t</string>
 				<key>withspace</key>
 				<true/>
 				<key>argumenttype</key>

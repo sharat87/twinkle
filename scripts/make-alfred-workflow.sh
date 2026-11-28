@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds build/Twinkle.alfredworkflow from alfred/: `ti <query>` in Alfred
+# Builds build/Twinkle.alfredworkflow from alfred/: `t <query>` in Alfred
 # searches Twinkle's bookmarks and history (AppleScript `search`).
 # Usage: scripts/make-alfred-workflow.sh [install]
 # With install, opens it so Alfred imports it (or updates the one it has).

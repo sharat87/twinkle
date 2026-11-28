@@ -160,7 +160,7 @@ end tell
 
 ### Alfred
 
-`ti <query>` in Alfred searches Twinkle's bookmarks (★) and history (🕒), using `search` above; ↩ opens the page in Twinkle, ⌘C copies its address. Twinkle has to be running. Build and import it with:
+`t <query>` in Alfred searches Twinkle's bookmarks (★) and history (🕒), using `search` above; ↩ opens the page in Twinkle, ⌘C copies its address. Twinkle has to be running. Build and import it with:
 
 ```sh
 scripts/make-alfred-workflow.sh install   # build/Twinkle.alfredworkflow, opened in Alfred
