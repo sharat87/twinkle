@@ -104,6 +104,33 @@ extension Tab {
     }
 }
 
+/// `search "query" [limit 30]`: bookmarks and history, ranked as in the
+/// address bar (bookmarks a step ahead of plain history), each page once.
+/// What the Alfred workflow (alfred/) lists, since other apps can't read
+/// Twinkle's files themselves.
+@objc(TwinkleSearchCommand)
+final class SearchCommand: NSScriptCommand {
+    override func performDefaultImplementation() -> Any? {
+        let query = (directParameter as? String ?? "").trimmingCharacters(in: .whitespaces)
+        let limit = max(1, evaluatedArguments?["limit"] as? Int ?? 30)
+        guard !query.isEmpty else { return [] as [Any] }
+        nonisolated(unsafe) var result: [[String: Any]] = []
+        MainActor.assumeIsolated {
+            let state = AppState.shared
+            let now = Date()
+            let ranked = (state.bookmarkIndex.search(query, limit: limit, now: now).map { ($0.entry, $0.score + 25, true) }
+                + state.suggestionIndex.search(query, limit: limit, now: now).map { ($0.entry, $0.score, false) })
+                .sorted { $0.1 > $1.1 }
+            var shown = Set<String>()
+            for (entry, _, bookmarked) in ranked where result.count < limit {
+                guard shown.insert(HistoryIndex.bare(entry.url)).inserted else { continue }
+                result.append(["title": entry.title, "URL": entry.url, "bookmarked": bookmarked])
+            }
+        }
+        return result
+    }
+}
+
 /// `new tab "https://…" [in container "Agent"]`: opens a tab in the
 /// background and loads it. Without a container, in a new temporary one.
 @objc(TwinkleNewTabCommand)

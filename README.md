@@ -165,7 +165,19 @@ tell application "Twinkle"
 end tell
 ```
 
+`search "query"` (optionally `limit 10`; default 30) searches bookmarks and history as the address bar does, best first, and gives each page's `title`, `URL` and whether it's `bookmarked`. Like reading tabs, it's allowed for any script macOS lets in.
+
 `new tab` opens in the background (requiring a full URL with scheme); pass `in container` an AppleScript-enabled container name (case-insensitive) or a script-created temporary container name (like `"Temporary 2"`, from `container of t`) to share its cookies. `do JavaScript` runs in the page and returns text, numbers and booleans as they are, anything else as JSON text; pages' Content Security Policies don't apply. macOS asks once per app (Terminal, your agent) before it may script Twinkle.
+
+### Alfred
+
+`ti <query>` in Alfred searches Twinkle's bookmarks (★) and history (🕒), using `search` above; ↩ opens the page in Twinkle, ⌘C copies its address. Twinkle has to be running. Build and import it with:
+
+```sh
+scripts/make-alfred-workflow.sh install   # build/Twinkle.alfredworkflow, opened in Alfred
+```
+
+The workflow lives in `alfred/`; run that again after changing it, and Alfred offers to update the one it has. Its `bundleid` variable picks the Twinkle to ask (`dev.twinkle.Twinkle.unsafe` for the test build). macOS asks once before Alfred may script Twinkle.
 
 ## Keys
 
@@ -199,6 +211,7 @@ Sources/Twinkle/       The macOS app (AppKit + WKWebView).
   AddressSuggestions       the address bar's dropdown
   Debug                    inspection hook used by debug.sh
 scripts/make-icon.swift    draws the app icon (build.sh runs it)
+alfred/                    the Alfred workflow (scripts/make-alfred-workflow.sh packs it)
 ```
 
 The content-blocker JSON that `FilterConverter` produces is WebKit's format, which WebKitGTK also reads, and the data files are plain JSON. Porting means writing a new shell, not translating data.

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>bundleid</key>
+	<string>dev.twinkle.alfred</string>
+	<key>category</key>
+	<string>Internet</string>
+	<key>name</key>
+	<string>Twinkle</string>
+	<key>description</key>
+	<string>Search Twinkle's bookmarks and history</string>
+	<key>createdby</key>
+	<string>Twinkle</string>
+	<key>webaddress</key>
+	<string>https://github.com/sharat87/twinkle</string>
+	<key>readme</key>
+	<string>ti &lt;query&gt; searches Twinkle's bookmarks (star) and history (clock), ranked as in its address bar. Return opens the page in Twinkle; ⌘C copies its address. Twinkle has to be running.
+
+The bundleid variable is the Twinkle to ask: dev.twinkle.Twinkle, or dev.twinkle.Twinkle.unsafe for the test build.
+
+Built from alfred/ in the Twinkle repository by scripts/make-alfred-workflow.sh.</string>
+	<key>variables</key>
+	<dict>
+		<key>bundleid</key>
+		<string>dev.twinkle.Twinkle</string>
+	</dict>
+	<key>variablesdontexport</key>
+	<array/>
+	<key>objects</key>
+	<array>
+		<dict>
+			<key>type</key>
+			<string>alfred.workflow.input.scriptfilter</string>
+			<key>uid</key>
+			<string>6F1B0C0E-7A1D-4C51-9C3B-1D2E3F405161</string>
+			<key>version</key>
+			<integer>3</integer>
+			<key>config</key>
+			<dict>
+				<key>keyword</key>
+				<string>ti</string>
+				<key>withspace</key>
+				<true/>
+				<key>argumenttype</key>
+				<integer>0</integer>
+				<key>title</key>
+				<string>Search Twinkle</string>
+				<key>subtext</key>
+				<string>Bookmarks and history</string>
+				<key>runningsubtext</key>
+				<string>Searching…</string>
+				<key>alfredfiltersresults</key>
+				<false/>
+				<key>queuemode</key>
+				<integer>1</integer>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuedelaycustom</key>
+				<integer>3</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<true/>
+				<key>type</key>
+				<integer>0</integer>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>script</key>
+				<string>osascript -l JavaScript search.js "${bundleid:-dev.twinkle.Twinkle}" "$1"</string>
+				<key>scriptfile</key>
+				<string></string>
+			</dict>
+		</dict>
+		<dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>A3C5E7F9-0B2D-4F61-8A3C-5E7F90B2D4F6</string>
+			<key>version</key>
+			<integer>2</integer>
+			<key>config</key>
+			<dict>
+				<key>type</key>
+				<integer>0</integer>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>concurrently</key>
+				<false/>
+				<key>script</key>
+				<string>open -b "${bundleid:-dev.twinkle.Twinkle}" "$1"</string>
+				<key>scriptfile</key>
+				<string></string>
+			</dict>
+		</dict>
+	</array>
+	<key>connections</key>
+	<dict>
+		<key>6F1B0C0E-7A1D-4C51-9C3B-1D2E3F405161</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>A3C5E7F9-0B2D-4F61-8A3C-5E7F90B2D4F6</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+	</dict>
+	<key>uidata</key>
+	<dict>
+		<key>6F1B0C0E-7A1D-4C51-9C3B-1D2E3F405161</key>
+		<dict><key>xpos</key><real>50</real><key>ypos</key><real>50</real></dict>
+		<key>A3C5E7F9-0B2D-4F61-8A3C-5E7F90B2D4F6</key>
+		<dict><key>xpos</key><real>300</real><key>ypos</key><real>50</real></dict>
+	</dict>
+</dict>
+</plist>

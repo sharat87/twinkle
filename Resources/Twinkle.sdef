@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
 <!-- Twinkle's AppleScript dictionary (Scripting.swift). Every tab's address
-     and title can be read; tabs can be opened, changed, closed and scripted
+     and title can be read, and bookmarks and history searched (for the
+     Alfred workflow in alfred/); tabs can be opened, changed, closed and scripted
      only in containers with "appleScriptEnabled": true in settings.json, and
      in temporary containers a script made. -->
 <dictionary title="Twinkle Terminology" xmlns:xi="http://www.w3.org/2003/XInclude">
@@ -41,6 +42,29 @@
 				<cocoa method="handleCloseScriptCommand:"/>
 			</responds-to>
 		</class>
+
+		<record-type name="page" code="Tpag" description="A bookmark or a page from history.">
+			<property name="title" code="Ttit" type="text" description="The page's title.">
+				<cocoa key="title"/>
+			</property>
+			<property name="URL" code="pURL" type="text" description="The page's address.">
+				<cocoa key="URL"/>
+			</property>
+			<property name="bookmarked" code="Tbmk" type="boolean" description="Is it a bookmark?">
+				<cocoa key="bookmarked"/>
+			</property>
+		</record-type>
+
+		<command name="search" code="TwnkSrch" description="Searches bookmarks and history as the address bar does: fuzzily, bookmarks first, then pages visited often and lately.">
+			<cocoa class="TwinkleSearchCommand"/>
+			<direct-parameter type="text" description="What to look for."/>
+			<parameter name="limit" code="Tlim" type="integer" optional="yes" description="At most this many pages (default 30).">
+				<cocoa key="limit"/>
+			</parameter>
+			<result description="The pages, best first.">
+				<type type="page" list="yes"/>
+			</result>
+		</command>
 
 		<command name="new tab" code="TwnkNTab" description="Opens a tab in the background, in a container that allows AppleScript, or by default in a new temporary container.">
 			<cocoa class="TwinkleNewTabCommand"/>
