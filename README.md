@@ -1,41 +1,35 @@
 # Twinkle
 
-A minimal web browser for macOS, built on the system's WebKit. Vibed just for myself; I expect it to be "finished" after a few weeks of use, so it's not looking for features.
+My minimal web browser for macOS, built on the system's WebKit. Vibed just for myself; I expect it to be "finished" after a few weeks of use, so it's not looking for features.
+
+- Built on system WebKit. Not Chromium.
+- Light and fast.
+- HTTPS first. If that fails, only then HTTP.
+- Containers with distinct cookiejars, like Firefox.
+- MRU tab switching like Firefox, SublimeText, iTerm2 etc.
+- Address bar in monospace font, so look-alike letters are easy to tell apart.
+- Settings and bookmarks are JSON files, no extra UI. Auto-reload on focusing Twinkle.
+- Window title has the URL host like `Title (host)` so KeepassXC's auto-type can work well.
+- Everything is under the menubar. No command palette & toolbar icon buttons. Use a fuzzy searcher for menubar via Alfred or Raycast.
+- Shortcuts configurable in macOS settings.
+- Permissions always denied. Camera, mic, screen capture etc. This may change later, but not present today.
+- Tabs on the right side.
+- No devtools. If you need, use another browser for that.
+- No MCP. There's AppleScript support, which your agent can use.
+- Idle tabs unload to keep a low footprint.
+- Shows response status code, like `200 OK` next to address bar.
+- Of course, ad & tracker blocking.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
   <img alt="Twinkle showing Apple's WKWebView documentation in a Work container, with the tab list on the right" src="docs/screenshot-light.png">
 </picture>
 
-**The UI surface is kept small:**
-
-- **Settings, containers and bookmarks are JSON files** you edit in your text editor. No preferences window. They're re-read whenever Twinkle comes to the front.
-- **Everything is in the menu bar.** No command palette, no toolbar buttons. For a fuzzy finder, use one for menu items, like Alfred or Raycast.
-- **Shortcuts are changed in macOS**, under System Settings › Keyboard › Keyboard Shortcuts › App Shortcuts, as for any menu item.
-- **No dev tools of its own.** Inspect Element opens Safari's Web Inspector.
-- **No MCP.** Ask your agent to write AppleScript (see below); it only gets the containers you let it have.
-- **Permissions are always denied.** Camera, microphone and screen capture are refused without asking. Location and web notifications aren't implemented at all. The one exception: a page that tries to open an app (Slack after you sign in, a Zoom link) asks first, naming the app and the container, so you choose which sign-in hands off to it. Links you click open their app without asking.
-
 <img alt="Twinkle's Tools menu open over a GitHub page: every action is a menu item, and the address field is in Monaco so look-alike letters stand apart" src="docs/screenshot-menus.png" width="751">
 
-## What's there
-
-- **Tabs down the right**, one address field, the page. No start page, no accounts. A speaker marks tabs playing sound; ⌃Tab goes back through tabs in the order you used them, listed beside the tab list while ⌃ is held.
-- **Containers**, like Firefox's Multi-Account Containers: tabs in one window, each container with its own cookies, storage and cache. Sites can be assigned to a container so they always open there.
-- **Temporary containers**: a throwaway cookie jar, kept only in memory and gone when its last tab closes.
-- **Idle tabs unload** after 30 minutes in the background, freeing their memory, and come back with their history when clicked. Tabs playing sound or holding a half-filled form are left alone.
-- **The address in full, in Monaco**, a monospaced font, so look-alike letters (`l`, `I`, `1`; `O`, `0`) can't pass for each other in a lookalike domain.
-- **A link's address while you point at it**, bottom left of the page, in Monaco like the address field.
-- **The response status beside the address**, like `200 OK`, orange for 4xx and red for 5xx. A padlock (or a certificate or mixed-content warning) sits before it.
-- **The page's host in the window title** (`Title (example.com)`), so KeePassXC auto-type matches sites without a browser extension.
-- **Ad and tracker blocking** with EasyList and EasyPrivacy (or any EasyList/uBlock-syntax list, or hosts file), compiled into WebKit content blockers that run before requests are made.
-- **HTTPS first**: an `http:` address (typed, linked or redirected to) is tried over HTTPS, and loads over HTTP only if that fails or the site sends it back; such a site isn't tried again until the next launch. Local addresses (`localhost`, IPs, `.local`, single words) and ones with a port load as they are.
-- **No autoplay**: sound and video wait for a click.
-- **Recently closed tabs** under History, each coming back in its container with its back/forward list (a closed temporary container's tab gets a new temporary container).
-- **JSON responses pretty-printed** and highlighted, with exact numbers and key order (Raw shows the original).
-- **Address bar suggestions**: history and open tabs, fuzzy-matched like Sublime Text, with inline completion of addresses you've visited.
-
 ## Build and run
+
+No packaged versions for now. Build and perhaps vibe more things yourself. You can ask your agent to build.
 
 Needs macOS 14+ and Swift 6 (the Command Line Tools are enough; Xcode isn't needed).
 
