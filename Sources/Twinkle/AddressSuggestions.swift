@@ -245,7 +245,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
     /// the page if it's one you've been to.
     private func typedRow(_ text: String, index: HistoryIndex) -> Row {
         let url: URL
-        switch Address.parse(text, search: AppState.shared.settings.search) {
+        switch Address.parse(text) {
         case nil:
             return Row(kind: .typed, title: text, detail: "", url: nil)
         case .search(let target, let query):
@@ -332,7 +332,7 @@ final class AddressSuggestions: NSObject, NSTableViewDataSource, NSTableViewDele
         case .history(let item):
             goTo(item, newTab)
         case .typed where row.url == nil:
-            if let url = Address.resolve(fieldText, search: AppState.shared.settings.search) { open(url, newTab) }
+            if let url = Address.resolve(fieldText) { open(url, newTab) }
         default:
             if let url = row.url { open(url, newTab) }
         }

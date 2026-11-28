@@ -944,7 +944,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, TabHo
     }
 
     @objc private func addressEntered(_ sender: NSTextField) {
-        guard let url = Address.resolve(sender.stringValue, search: AppState.shared.settings.search) else { return }
+        guard let url = Address.resolve(sender.stringValue) else { return }
         if let tab = current {
             tab.load(url)
             select(selected)

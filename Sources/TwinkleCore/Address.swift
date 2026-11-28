@@ -1,47 +1,35 @@
 import Foundation
 
-/// Turns what was typed in the address field into a URL to load: a prefixed
-/// search, an address if it looks like one, or the default search.
+/// Turns what was typed in the address field into a URL to load: an address
+/// if it looks like one, otherwise a DuckDuckGo search (whose `!bang`s cover
+/// searching elsewhere).
 public enum Address {
     public enum Resolution: Equatable, Sendable {
         case url(URL)
         case search(url: URL, query: String)
     }
 
-    public static func resolve(_ raw: String, search engines: [String: String]) -> URL? {
-        switch parse(raw, search: engines) {
+    static let searchURL = "https://duckduckgo.com/?q=%s"
+
+    public static func resolve(_ raw: String) -> URL? {
+        switch parse(raw) {
         case .url(let url), .search(let url, _): return url
         case nil: return nil
         }
     }
 
-    public static func parse(_ raw: String, search engines: [String: String]) -> Resolution? {
+    public static func parse(_ raw: String) -> Resolution? {
         let input = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { return nil }
-        if let space = input.firstIndex(where: \.isWhitespace) {
-            let prefix = String(input[..<space])
-            let query = String(input[space...].drop(while: \.isWhitespace))
-            if !prefix.isEmpty, !query.isEmpty, let template = template(forPrefix: prefix, in: engines) {
-                return search(query, template: template).map { .search(url: $0, query: query) }
-            }
-        }
         if let url = asURL(input) { return .url(url) }
-        let fallback = engines[""] ?? Settings.defaultSearchURL
-        return search(input, template: fallback).map { .search(url: $0, query: input) }
+        return search(input).map { .search(url: $0, query: input) }
     }
 
-    private static func template(forPrefix prefix: String, in engines: [String: String]) -> String? {
-        if let exact = engines[prefix] { return exact }
-        return engines.keys.sorted()
-            .first { !$0.isEmpty && $0.caseInsensitiveCompare(prefix) == .orderedSame }
-            .flatMap { engines[$0] }
-    }
-
-    public static func search(_ query: String, template: String) -> URL? {
+    public static func search(_ query: String) -> URL? {
         var allowed = CharacterSet.urlQueryAllowed
         allowed.remove(charactersIn: "&+=?#/;")
         let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query
-        return URL(string: template.replacingOccurrences(of: "%s", with: encoded))
+        return URL(string: searchURL.replacingOccurrences(of: "%s", with: encoded))
     }
 
     /// Whether two addresses are the same page, for reusing an open tab:
