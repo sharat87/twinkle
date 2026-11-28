@@ -7,6 +7,7 @@ My minimal web browser for macOS, built on the system's WebKit. Vibed just for m
 - HTTPS first. If that fails, only then HTTP.
 - Containers with distinct cookiejars, like Firefox.
 - MRU tab switching like Firefox, SublimeText, iTerm2 etc.
+- Hints mode, like Pentadactyl or Vimium, with Cmd-I.
 - Address bar in monospace font, so look-alike letters are easy to tell apart.
 - Settings and bookmarks are JSON files, no extra UI. Auto-reload on focusing Twinkle.
 - Window title has the URL host like `Title (host)` so KeepassXC's auto-type can work well.
