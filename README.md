@@ -1,4 +1,4 @@
-# <img src="docs/icon.png" alt="" width="48" align="middle"> Twinkle
+# <img src="docs/icon.png" alt="" width="40" align="absmiddle"> Twinkle
 
 My minimal web browser for macOS, built on the system's WebKit. Vibed just for myself; I expect it to be "finished" after a few weeks of use, so it's not looking for features.
 
